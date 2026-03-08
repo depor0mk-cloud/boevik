@@ -1,8 +1,12 @@
 import logging
 import html
+import re
+import asyncio
+import random
 from datetime import datetime, timedelta
 from aiogram import Router, types, F
 from aiogram.filters import Command
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 from firebase_db import get_db_ref
 
 router = Router()
@@ -36,9 +40,15 @@ async def cmd_boevik(message: types.Message):
         "• <code>/мой клан</code> — Показать статистику вашего клана\n\n"
         "<b>⚔️ Война и Дипломатия:</b>\n"
         "• <code>/объявить войну [название или тег]</code> — Начать войну с другим кланом (только лидер)\n"
+        "• <code>/атака [кол-во]</code> — Отправить армию в атаку. КД: 3 мин\n"
         "• <code>/белый мир</code> — Предложить или принять белый мир (без потерь, только лидер)\n"
+        "• <code>/перемирие [время]</code> — Предложить перемирие (например: 1ч, 1д)\n"
         "• <code>/капитуляция</code> — Признать поражение (если HP столицы = 0, только лидер)\n"
-        "• <code>/аннексия</code> — Захватить территорию врага (если HP врага &lt; 20%, только лидер)\n\n"
+        "• <code>/аннексия</code> — Захватить территорию врага (если HP врага &lt; 20%, только лидер)\n"
+        "• <code>/ультиматум [цель] [текст]</code> — Отправить ультиматум клану\n\n"
+        "<b>🚀 Ракетная программа:</b>\n"
+        "• <code>/разработка [баллистика/ядерка]</code> — Вложить 10% золота в разработку\n"
+        "• <code>/пуск [баллистика/ядерка] [цель]</code> — Запустить ракету (только лидер)\n\n"
         "<b>🏭 Экономика и Армия:</b>\n"
         "• <code>/мобилизация</code> — Нанять солдат (от 50 до 500). КД: 5ч\n"
         "• <code>/работать</code> — Произвести ресурсы для клана (армия и золото). КД: 4ч\n"
@@ -246,13 +256,14 @@ async def my_clan(message: types.Message):
         f"<b>📈 Уровни:</b>\n"
         f"💪 Сила: {clan.get('power_level', 1)} | 🛡 Защита: {clan.get('defense_level', 1)} | ❤️ Здоровье: {clan.get('health_level', 1)}\n\n"
         f"<b>🏭 Заводы:</b>\n"
-        f"🔫 Оружейные: {clan.get('factory_weapon', 0)} | 🏦 Финансовые: {clan.get('factory_finance', 0)} | 🧱 Оборонительные: {clan.get('factory_defense', 0)}"
+        f"🔫 Оружейные: {clan.get('factory_weapon', 0)} | 🏦 Финансовые: {clan.get('factory_finance', 0)} | 🧱 Оборонительные: {clan.get('factory_defense', 0)}\n\n"
+        f"<b>🚀 Ракетная программа:</b>\n"
+        f"Баллистика: {clan.get('prog_ballistic', 0)} / 100000\n"
+        f"Ядерка: {clan.get('prog_nuclear', 0)} / 1000000"
     )
     await message.answer(text)
 
 # --- Economy & Army ---
-
-import random
 
 @router.message(Command("мобилизация", prefix="/"))
 async def mobilize(message: types.Message):
@@ -609,6 +620,371 @@ async def annex(message: types.Message):
         
     war_ref.delete()
     await message.answer(f"⚔️ Вы успешно аннексировали часть территории клана <b>{html.escape(loser.get('name', ''))}</b>! Получено золото и новые участники.")
+
+@router.message(F.text.regexp(r'(?i)^/атака'))
+async def attack(message: types.Message):
+    args = message.text.split()
+    if len(args) < 2 or not args[1].isdigit():
+        await message.answer("⚠️ Использование: <code>/атака [количество]</code>")
+        return
+    
+    amount = int(args[1])
+    if amount <= 0:
+        return
+        
+    user_id = str(message.from_user.id)
+    user = get_or_create_user(user_id, message.from_user.username or message.from_user.first_name)
+    clan_id = user.get('clan_id')
+    
+    if not clan_id:
+        await message.answer("⚠️ Вы не состоите в клане.")
+        return
+        
+    if user.get('army', 0) < amount:
+        await message.answer("⚠️ У вас недостаточно солдат.")
+        return
+        
+    clan = get_db_ref(f'clans/{clan_id}').get()
+    war_id = clan.get('war_id')
+    if not war_id:
+        await message.answer("⚠️ Ваш клан не воюет.")
+        return
+        
+    war_ref = get_db_ref(f'wars/{war_id}')
+    war = war_ref.get()
+    if not war: return
+    
+    # Check truce
+    truce_until = war.get('truce_until')
+    if truce_until:
+        truce_time = datetime.fromisoformat(truce_until)
+        if datetime.now() < truce_time:
+            await message.answer("⚠️ Действует перемирие! Атака невозможна.")
+            return
+            
+    # Check cooldown
+    now = datetime.now()
+    if user.get('last_attack'):
+        last_attack = datetime.fromisoformat(user['last_attack'])
+        if now - last_attack < timedelta(minutes=3):
+            rem = timedelta(minutes=3) - (now - last_attack)
+            await message.answer(f"⏳ КД на атаку! Осталось: {rem.seconds} сек.")
+            return
+            
+    # Deduct army and set cooldown
+    get_db_ref(f'users/{user_id}').update({
+        'army': user.get('army', 0) - amount,
+        'last_attack': now.isoformat()
+    })
+    
+    delay = random.randint(10, 40)
+    await message.answer(f"⚔️ Войска отправлены в бой! ({amount} солдат). Ожидайте результатов через {delay} секунд...")
+    
+    await asyncio.sleep(delay)
+    
+    # Recalculate everything
+    clan = get_db_ref(f'clans/{clan_id}').get()
+    war = get_db_ref(f'wars/{war_id}').get()
+    if not war:
+        await message.answer("⚠️ Война уже закончилась, ваши войска вернулись.")
+        get_db_ref(f'users/{user_id}').update({'army': user.get('army', 0) + amount})
+        return
+        
+    defender_id = war['defender_id'] if war['attacker_id'] == clan_id else war['attacker_id']
+    defender = get_db_ref(f'clans/{defender_id}').get()
+    
+    # Calculate power
+    att_power = amount * clan.get('power_level', 1) * (1 + 0.05 * clan.get('factory_weapon', 0))
+    
+    all_users = get_db_ref('users').get() or {}
+    def_army = sum(u.get('army', 0) for u in all_users.values() if u.get('clan_id') == defender_id)
+    
+    def_power = def_army * defender.get('defense_level', 1) * (1 + 0.05 * defender.get('factory_defense', 0)) * 0.1
+    
+    # Calculate losses
+    att_losses = min(amount, int((def_power / att_power) * amount * random.uniform(0.5, 1.5)) if att_power > 0 else amount)
+    def_losses = min(int(def_army * 0.1), int((att_power / def_power) * (def_army * 0.1) * random.uniform(0.5, 1.5)) if def_power > 0 else int(att_power))
+    
+    damage = max(0, int(att_power - def_power))
+    
+    # Apply defender losses proportionally
+    if def_losses > 0 and def_army > 0:
+        loss_ratio = def_losses / def_army
+        for uid, udata in all_users.items():
+            if udata.get('clan_id') == defender_id and udata.get('army', 0) > 0:
+                u_loss = int(udata['army'] * loss_ratio)
+                get_db_ref(f'users/{uid}').update({'army': max(0, udata['army'] - u_loss)})
+                
+    # Return surviving attackers
+    survivors = amount - att_losses
+    if survivors > 0:
+        current_user = get_db_ref(f'users/{user_id}').get()
+        get_db_ref(f'users/{user_id}').update({'army': current_user.get('army', 0) + survivors})
+        
+    # Apply damage to capital
+    new_hp = max(0, defender.get('capital_hp', 1000) - damage)
+    get_db_ref(f'clans/{defender_id}').update({'capital_hp': new_hp})
+    
+    result_msg = (
+        f"🔥 <b>Итог битвы:</b>\n"
+        f"Атакующий <b>{html.escape(clan.get('name', ''))}</b>:\n"
+        f"➖ Потери: {att_losses} солдат\n\n"
+        f"Обороняющийся <b>{html.escape(defender.get('name', ''))}</b>:\n"
+        f"➖ Потери: {def_losses} солдат\n"
+        f"💥 Урон столице: {damage} (Осталось: {new_hp} HP)"
+    )
+    
+    await message.answer(result_msg)
+    
+    # Notify defender
+    def_chat_id = defender.get('chat_id')
+    if def_chat_id:
+        try:
+            await message.bot.send_message(def_chat_id, f"⚠️ <b>Внимание!</b> Нас атаковали!\n\n{result_msg}")
+        except:
+            pass
+
+@router.message(F.text.regexp(r'(?i)^/перемирие'))
+async def truce(message: types.Message):
+    args = message.text.split()
+    if len(args) < 2:
+        await message.answer("⚠️ Использование: <code>/перемирие [время, например 1ч или 1д]</code>")
+        return
+        
+    time_str = args[1].lower()
+    hours = 0
+    if 'ч' in time_str:
+        hours = int(re.sub(r'\D', '', time_str) or 0)
+    elif 'д' in time_str:
+        hours = int(re.sub(r'\D', '', time_str) or 0) * 24
+        
+    if hours <= 0:
+        await message.answer("⚠️ Неверный формат времени.")
+        return
+        
+    user_id = str(message.from_user.id)
+    user = get_or_create_user(user_id, message.from_user.username or message.from_user.first_name)
+    clan_id = user.get('clan_id')
+    if not clan_id: return
+    
+    clan = get_db_ref(f'clans/{clan_id}').get()
+    if clan.get('leader_id') != user_id:
+        await message.answer("⚠️ Только лидер может предлагать перемирие.")
+        return
+        
+    war_id = clan.get('war_id')
+    if not war_id:
+        await message.answer("⚠️ Ваш клан не воюет.")
+        return
+        
+    war_ref = get_db_ref(f'wars/{war_id}')
+    war = war_ref.get()
+    
+    if war.get('truce_offer_by') == clan_id:
+        await message.answer("⏳ Вы уже предложили перемирие. Ожидайте ответа.")
+        return
+        
+    if war.get('truce_offer_by') and war.get('truce_offer_by') != clan_id:
+        # Accept
+        truce_hours = war.get('truce_offer_hours', 1)
+        truce_until = (datetime.now() + timedelta(hours=truce_hours)).isoformat()
+        war_ref.update({
+            'truce_offer_by': None,
+            'truce_offer_hours': None,
+            'truce_until': truce_until
+        })
+        await message.answer(f"🤝 Перемирие заключено на {truce_hours} ч.!")
+    else:
+        # Offer
+        war_ref.update({
+            'truce_offer_by': clan_id,
+            'truce_offer_hours': hours
+        })
+        await message.answer(f"🕊 Вы предложили перемирие на {hours} ч. Чтобы оно вступило в силу, лидер вражеского клана должен также написать <code>/перемирие {hours}ч</code>.")
+
+@router.message(F.text.regexp(r'(?i)^/разработка'))
+async def develop(message: types.Message):
+    args = message.text.split()
+    if len(args) < 2 or args[1].lower() not in ['баллистика', 'ядерка']:
+        await message.answer("⚠️ Использование: <code>/разработка [баллистика/ядерка]</code>")
+        return
+        
+    target = args[1].lower()
+    
+    user_id = str(message.from_user.id)
+    user = get_or_create_user(user_id, message.from_user.username or message.from_user.first_name)
+    clan_id = user.get('clan_id')
+    if not clan_id: return
+    
+    clan_ref = get_db_ref(f'clans/{clan_id}')
+    clan = clan_ref.get()
+    
+    gold = clan.get('gold', 0)
+    if gold < 10:
+        await message.answer("⚠️ В казне слишком мало золота для разработки (нужно хотя бы 10).")
+        return
+        
+    invest = int(gold * 0.1)
+    new_gold = gold - invest
+    
+    if target == 'баллистика':
+        prog = clan.get('prog_ballistic', 0) + invest
+        clan_ref.update({'gold': new_gold, 'prog_ballistic': prog})
+        await message.answer(f"🚀 Вы вложили {invest} золота в баллистику! Прогресс: {prog} / 100000")
+    else:
+        prog = clan.get('prog_nuclear', 0) + invest
+        clan_ref.update({'gold': new_gold, 'prog_nuclear': prog})
+        await message.answer(f"☢️ Вы вложили {invest} золота в ядерную программу! Прогресс: {prog} / 1000000")
+
+@router.message(F.text.regexp(r'(?i)^/пуск'))
+async def launch(message: types.Message):
+    args = message.text.split(maxsplit=2)
+    if len(args) < 3 or args[1].lower() not in ['баллистика', 'ядерка']:
+        await message.answer("⚠️ Использование: <code>/пуск [баллистика/ядерка] [цель]</code>")
+        return
+        
+    target_type = args[1].lower()
+    target_query = args[2].lower()
+    
+    user_id = str(message.from_user.id)
+    user = get_or_create_user(user_id, message.from_user.username or message.from_user.first_name)
+    clan_id = user.get('clan_id')
+    if not clan_id: return
+    
+    clan_ref = get_db_ref(f'clans/{clan_id}')
+    clan = clan_ref.get()
+    
+    if clan.get('leader_id') != user_id:
+        await message.answer("⚠️ Только лидер может запускать ракеты!")
+        return
+        
+    if target_type == 'баллистика' and clan.get('prog_ballistic', 0) < 100000:
+        await message.answer("⚠️ Баллистическая ракета еще не разработана!")
+        return
+    if target_type == 'ядерка' and clan.get('prog_nuclear', 0) < 1000000:
+        await message.answer("⚠️ Ядерная ракета еще не разработана!")
+        return
+        
+    all_clans = get_db_ref('clans').get() or {}
+    defender_id = None
+    defender = None
+    for cid, cdata in all_clans.items():
+        if cdata.get('name', '').lower() == target_query or cdata.get('tag', '').lower() == target_query:
+            defender_id = cid
+            defender = cdata
+            break
+            
+    if not defender:
+        await message.answer("⚠️ Цель не найдена.")
+        return
+        
+    if defender_id == clan_id:
+        await message.answer("⚠️ Нельзя ударить по себе.")
+        return
+        
+    # Reset progress after launch
+    if target_type == 'баллистика':
+        clan_ref.update({'prog_ballistic': 0})
+        damage = 5000
+        msg_text = f"🚀 <b>ЗАПУСК БАЛЛИСТИЧЕСКОЙ РАКЕТЫ!</b>\nКлан <b>{html.escape(clan.get('name', ''))}</b> нанес удар по <b>{html.escape(defender.get('name', ''))}</b>!\nУрон столице: {damage} HP."
+    else:
+        clan_ref.update({'prog_nuclear': 0})
+        damage = 50000
+        msg_text = f"☢️ <b>ЯДЕРНЫЙ УДАР!</b>\nКлан <b>{html.escape(clan.get('name', ''))}</b> стер с лица земли <b>{html.escape(defender.get('name', ''))}</b>!\nУрон столице: {damage} HP."
+        
+    new_hp = max(0, defender.get('capital_hp', 1000) - damage)
+    get_db_ref(f'clans/{defender_id}').update({'capital_hp': new_hp})
+    
+    await message.answer(msg_text)
+    
+    def_chat_id = defender.get('chat_id')
+    if def_chat_id:
+        try:
+            await message.bot.send_message(def_chat_id, msg_text)
+        except:
+            pass
+
+@router.message(F.text.regexp(r'(?i)^/ультиматум'))
+async def ultimatum(message: types.Message):
+    args = message.text.split(maxsplit=2)
+    if len(args) < 3:
+        await message.answer("⚠️ Использование: <code>/ультиматум [название или тег] [сообщение]</code>")
+        return
+        
+    target_query = args[1].lower()
+    ult_text = args[2]
+    
+    user_id = str(message.from_user.id)
+    user = get_or_create_user(user_id, message.from_user.username or message.from_user.first_name)
+    clan_id = user.get('clan_id')
+    if not clan_id: return
+    
+    clan = get_db_ref(f'clans/{clan_id}').get()
+    if clan.get('leader_id') != user_id:
+        await message.answer("⚠️ Только лидер может отправлять ультиматумы.")
+        return
+        
+    all_clans = get_db_ref('clans').get() or {}
+    defender_id = None
+    defender = None
+    for cid, cdata in all_clans.items():
+        if cdata.get('name', '').lower() == target_query or cdata.get('tag', '').lower() == target_query:
+            defender_id = cid
+            defender = cdata
+            break
+            
+    if not defender:
+        await message.answer("⚠️ Цель не найдена.")
+        return
+        
+    def_chat_id = defender.get('chat_id')
+    if not def_chat_id:
+        await message.answer("⚠️ Клан не привязан к чату, невозможно отправить ультиматум.")
+        return
+        
+    builder = InlineKeyboardBuilder()
+    builder.button(text="✅ Принять", callback_data=f"ult_accept_{clan_id}_{defender_id}")
+    builder.button(text="❌ Отвергнуть", callback_data=f"ult_reject_{clan_id}_{defender_id}")
+    
+    try:
+        await message.bot.send_message(
+            def_chat_id,
+            f"📜 <b>УЛЬТИМАТУМ от {html.escape(clan.get('name', ''))}</b>\n\n<i>{html.escape(ult_text)}</i>\n\nЛидер, сделайте выбор:",
+            reply_markup=builder.as_markup()
+        )
+        await message.answer("✅ Ультиматум отправлен.")
+    except Exception as e:
+        await message.answer("⚠️ Ошибка отправки ультиматума (возможно, бот не в чате врага).")
+
+@router.callback_query(F.data.startswith("ult_"))
+async def ult_callback(callback: types.CallbackQuery):
+    parts = callback.data.split('_')
+    action = parts[1]
+    sender_id = parts[2]
+    target_id = parts[3]
+    
+    user_id = str(callback.from_user.id)
+    target_clan = get_db_ref(f'clans/{target_id}').get()
+    
+    if not target_clan or target_clan.get('leader_id') != user_id:
+        await callback.answer("Только лидер может ответить на ультиматум!", show_alert=True)
+        return
+        
+    sender_clan = get_db_ref(f'clans/{sender_id}').get()
+    sender_name = sender_clan.get('name', 'Неизвестно') if sender_clan else 'Неизвестно'
+    
+    if action == "accept":
+        text = f"✅ Клан <b>{html.escape(target_clan.get('name', ''))}</b> ПРИНЯЛ ультиматум от <b>{html.escape(sender_name)}</b>!"
+    else:
+        text = f"❌ Клан <b>{html.escape(target_clan.get('name', ''))}</b> ОТВЕРГ ультиматум от <b>{html.escape(sender_name)}</b>! Готовьтесь к войне!"
+        
+    await callback.message.edit_text(text)
+    
+    if sender_clan and sender_clan.get('chat_id'):
+        try:
+            await callback.bot.send_message(sender_clan.get('chat_id'), text)
+        except:
+            pass
 
 @router.message()
 async def handle_all(message: types.Message):
