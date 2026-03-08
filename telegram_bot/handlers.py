@@ -1,4 +1,5 @@
 import sqlite3
+import logging
 from datetime import datetime, timedelta
 from aiogram import Router, types, F
 from aiogram.filters import Command
@@ -451,3 +452,8 @@ async def annex(message: types.Message):
     conn.close()
     
     await message.answer(f"⚔️ Вы успешно аннексировали часть территории клана <b>{loser['name']}</b>! Получено золото и новые участники.")
+
+@router.message()
+async def handle_all(message: types.Message):
+    logging.info(f"Received unhandled message: {message.text}")
+    await message.answer("Я не понимаю эту команду. Проверьте список доступных команд.")
