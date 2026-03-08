@@ -462,50 +462,26 @@ async def cmd_start(message: types.Message):
     )
     await message.answer(text)
 
-@router.message(Command("boevik"))
-async def cmd_boevik(message: types.Message):
-    if not is_bot_active():
-        await message.answer("⚠️ Бот временно отключен на технические работы.")
-        return
-    text = (
-        "⚔️ <b>Справочник Клан-Бота</b> ⚔️\n\n"
-        "<b>🏰 Управление кланом:</b>\n"
-        "• <code>/создать клан [имя] [тег]</code> — Создать клан\n"
-        "• <code>/вступить [тег/номер]</code> — Вступить в клан\n"
-        "• <code>/клан</code> — Меню клана\n"
-        "• <code>/выйти</code> — Покинуть клан\n"
-        "• <code>/удалить клан</code> — Удалить клан (только лидер)\n"
-        "• <code>/переименовать клан [имя]</code> — Сменить имя клана\n"
-        "• <code>/кик [id]</code> — Исключить игрока (только лидер)\n"
-        "• <code>/повысить [id]</code> — Передать лидерство\n"
-        "• <code>/список кланов</code> — Топ кланов чата\n"
-        "• <code>/мой клан</code> — Инфо о клане в ЛС\n\n"
-        "<b>💰 Экономика:</b>\n"
-        "• <code>/экономика</code> — Инфо о ресурсах и производстве\n"
-        "• <code>/создать производство [товар]</code> — 1000 💰\n"
-        "• <code>/улучшить производство [товар]</code> — Ускорить добычу\n"
-        "• <code>/мировой магазин</code> — Рынок ресурсов\n"
-        "• <code>/продать [товар] [кол-во] [цена]</code> — Выставить лот\n"
-        "• <code>/купить [id] [кол-во]</code> — Купить на рынке\n"
-        "• <code>/подработка</code> — Мелкий заработок (КД 30 мин)\n"
-        "• <code>/устроиться</code> — Крупный заработок (КД 6 ч)\n"
-        "• <code>/строй завод</code> — Строительство (лидер, КД 10 мин)\n\n"
-        "<b>⚔️ Война:</b>\n"
-        "• <code>/объявить войну [клан]</code> — Начать войну\n"
-        "• <code>/мир [клан] [ресурс/золото] [кол-во]</code> — Мирный договор\n"
-        "• <code>/мобилизация</code> — Нанять армию (лидер)\n"
-        "• <code>/атака [кол-во]</code> — Атаковать врага\n"
-        "• <code>/оборона [кол-во]</code> — Укрепить защиту\n"
-        "• <code>/столица [сумма]</code> — Укрепить столицу\n"
-        "• <code>/ультиматум [клан] [текст]</code> — Отправить требование\n\n"
-        "<b>🤝 Дипломатия:</b>\n"
-        "• <code>/предложить альянс [клан]</code> — Предложить союз\n"
-        "• <code>/разорвать альянс [клан]</code> — Разорвать союз\n\n"
-        "<b>🚀 Технологии:</b>\n"
-        "• <code>/разработка</code> — Вклад в ракеты (Граждане: 1 раз/час)\n"
-        "• <code>/пуск [тип] [цель]</code> — Ядерный удар\n"
-    )
-    await message.answer(text)
+@router.message(Command("кланы"))
+async def cmd_clans(message: types.Message):
+    await message.answer("🏰 <b>Кланы:</b>\n• /создать клан [имя] [тег]\n• /вступить [тег/номер]\n• /клан — Меню клана\n• /выйти — Покинуть\n• /удалить клан — Удалить (лидер)\n• /переименовать клан [имя]\n• /кик [юз] — Исключить (лидер)\n• /передать права [юз] — Передать лидерство\n• /список кланов — Топ кланов\n• /мой клан — Инфо о клане")
+
+@router.message(Command("работы"))
+async def cmd_jobs(message: types.Message):
+    await message.answer("💰 <b>Работы:</b>\n• /работа — Основная работа\n• /работа2 — Вторая работа\n• /подработка — Мелкий заработок (КД 30 мин)\n• /устроиться — Крупный заработок (КД 6 ч)\n• /строй завод — Строительство (лидер, КД 10 мин)")
+
+@router.message(Command("экономика"))
+async def cmd_economy(message: types.Message):
+    await message.answer("📈 <b>Экономика:</b>\n• /экономика — Инфо о ресурсах и производстве\n• /создать производство [товар] — 1000 💰\n• /улучшить производство [товар] — Ускорить добычу\n• /продать товар [название] [шт] — Продать")
+
+@router.message(Command("военное"))
+async def cmd_war(message: types.Message):
+    await message.answer("⚔️ <b>Военное:</b>\n• /объявить войну [клан]\n• /мир [клан] [ресурс/золото] [кол-во]\n• /мобилизация — Нанять армию\n• /тренировка — Увеличить силу\n• /атака [кол-во]\n• /оборона [кол-во]\n• /столица [сумма]\n• /ультиматум [клан] [текст]\n• /баллистика — Купить баллистику\n• /ядерка — Купить ядерку")
+
+@router.message(Command("другое"))
+async def cmd_other(message: types.Message):
+    await message.answer("🤝 <b>Другое:</b>\n• /boevik — Справочник\n• /предложить альянс [клан]\n• /разорвать альянс [клан]\n• /разработка — Вклад в ракеты\n• /пуск [тип] [цель] — Ядерный удар")
+
 
 @router.message(F.text.regexp(r'(?i)^/переименовать клан'))
 async def rename_clan(message: types.Message):
@@ -1642,83 +1618,9 @@ async def economy_menu(message: types.Message):
         
     await message.answer(text)
 
-@router.message(F.text.regexp(r'(?i)^/мировой магазин'))
-async def global_market(message: types.Message):
-    if not is_bot_active(): return
-    market = get_db_ref('market').get() or {}
-    if not market:
-        await message.answer("🛒 Мировой магазин пуст.")
-        return
-        
-    text = "🛒 <b>Мировой магазин:</b>\n\n"
-    for lot_id, data in list(market.items())[:20]: # Show top 20
-        clan_name = data.get('clan_name', 'Неизвестно')
-        item = data.get('item', 'товар')
-        amount = data.get('amount', 0)
-        price = data.get('price', 0)
-        text += f"🆔 <code>{lot_id}</code> | {clan_name}\n"
-        text += f"📦 {item.capitalize()} ({amount} шт) — 💰 {price} за шт.\n\n"
-        
-    text += "<i>Для покупки используйте:</i> <code>/купить [id] [кол-во]</code>"
-    await message.answer(text)
+# Removed command
 
-@router.message(F.text.regexp(r'(?i)^/продать производство'))
-async def sell_production(message: types.Message):
-    if not is_bot_active(): return
-    args = message.text.split()
-    if len(args) < 4:
-        await message.answer("⚠️ Использование: <code>/продать производство [название] [кол-во]</code>")
-        return
-        
-    item = args[2].lower()
-    try:
-        amount = int(args[3])
-    except:
-        await message.answer("⚠️ Количество должно быть числом.")
-        return
-        
-    if amount <= 0: return
-    
-    user_id = str(message.from_user.id)
-    user = get_or_create_user(user_id, message.from_user.username or message.from_user.first_name)
-    clan_id = user.get('clan_id')
-    if not clan_id: return
-    
-    clan_ref = get_db_ref(f'clans/{clan_id}')
-    clan = clan_ref.get()
-    
-    # Assuming production is stored in 'productions'
-    productions = clan.get('productions', {})
-    if productions.get(item, 0) < amount:
-        await message.answer(f"⚠️ Недостаточно производства <b>{html.escape(item)}</b> (у вас {productions.get(item, 0)}).")
-        return
-        
-    # Define prices here
-    prices = {'железо': 10, 'дерево': 5, 'еда': 2} # Example prices
-    price_per_unit = prices.get(item, 1)
-    total_gold = amount * price_per_unit
-    
-    # Deduct production and add gold
-    productions[item] -= amount
-    clan_ref.update({
-        'productions': productions,
-        'gold': clan.get('gold', 0) + total_gold
-    })
-    
-    await message.answer(f"✅ Продано {amount} шт. {html.escape(item)} за {total_gold} золота.")
-    
-    # Create lot
-    lot_ref = get_db_ref('market').push()
-    lot_ref.set({
-        'clan_id': clan_id,
-        'clan_name': clan.get('name', ''),
-        'item': item,
-        'amount': amount,
-        'price': price,
-        'created_at': datetime.now().isoformat()
-    })
-    
-    await message.answer(f"✅ Выставили {amount} шт. <b>{html.escape(item)}</b> по {price} 💰 за штуку.\n🆔 ID лота: <code>{lot_ref.key}</code>")
+# Removed command
 
 @router.message(F.text.regexp(r'(?i)^/купить'))
 async def buy_item(message: types.Message):
