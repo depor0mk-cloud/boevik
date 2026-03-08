@@ -59,6 +59,15 @@ async def process_wars(bot):
                 
             get_db_ref(f'wars/{war_id}').update({'last_tick': now.isoformat()})
             
-            # Here we would send message to the global chat if we had its ID.
-            # For now, we just log it. In a real bot, we'd broadcast to a specific channel or to leaders.
+            # Send notification to both clans if they have a registered chat_id
+            if msg:
+                for cid in [attacker_id, defender_id]:
+                    c_data = attacker if cid == attacker_id else defender
+                    chat_id = c_data.get('chat_id')
+                    if chat_id:
+                        try:
+                            await bot.send_message(chat_id, msg)
+                        except Exception as e:
+                            logging.error(f"Failed to send message to {chat_id}: {e}")
+            
             logging.info(msg)

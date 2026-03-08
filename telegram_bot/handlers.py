@@ -48,7 +48,13 @@ async def cmd_boevik(message: types.Message):
 
 @router.message(Command("start"))
 async def cmd_start(message: types.Message):
-    await cmd_boevik(message)
+    text = (
+        "👋 <b>Приветствую, полководец!</b>\n\n"
+        "Я — Клан-Бот, твой верный помощник в управлении кланом и ведении войн.\n"
+        "Чтобы увидеть полный список команд и узнать, как управлять своей империей, введи команду:\n\n"
+        "👉 /boevik"
+    )
+    await message.answer(text)
 
 # --- Clan Management ---
 
@@ -86,6 +92,7 @@ async def create_clan(message: types.Message):
         'name': name,
         'tag': tag,
         'leader_id': user_id,
+        'chat_id': message.chat.id,
         'exp': 0,
         'capital_hp': 1000,
         'max_capital_hp': 1000,
@@ -177,6 +184,10 @@ async def my_clan(message: types.Message):
         await message.answer("⚠️ Ваш клан не найден (возможно, был удален).")
         get_db_ref(f'users/{user_id}').update({'clan_id': None})
         return
+        
+    # Update chat_id to ensure notifications go to the current active chat
+    if clan.get('chat_id') != message.chat.id:
+        get_db_ref(f'clans/{clan_id}').update({'chat_id': message.chat.id})
         
     all_users = get_db_ref('users').get() or {}
     clan_users = [u for u in all_users.values() if u.get('clan_id') == clan_id]
