@@ -798,6 +798,10 @@ async def attack(message: types.Message):
         await message.answer("⚠️ У вас недостаточно солдат.")
         return
         
+    if user.get('army', 0) <= 0:
+        await message.answer("⚠️ У вас нет армии для атаки.")
+        return
+        
     clan = get_db_ref(f'clans/{clan_id}').get()
     war_id = clan.get('war_id')
     if not war_id:
@@ -1134,10 +1138,10 @@ async def ultimatum(message: types.Message):
     try:
         await message.bot.send_message(
             def_chat_id,
-            f"📜 <b>УЛЬТИМАТУМ от {html.escape(clan.get('name', ''))}</b>\n\n<i>{html.escape(ult_text)}</i>\n\nЛидер, сделайте выбор:",
+            f"📜 <b>УЛЬТИМАТУМ от {html.escape(clan.get('name', ''))}</b> клану <b>{html.escape(defender.get('name', ''))}</b>\n\n<i>{html.escape(ult_text)}</i>\n\nЛидер, сделайте выбор:",
             reply_markup=builder.as_markup()
         )
-        await message.answer("✅ Ультиматум отправлен.")
+        await message.answer(f"✅ Ультиматум отправлен клану <b>{html.escape(defender.get('name', ''))}</b>.")
     except Exception as e:
         await message.answer("⚠️ Ошибка отправки ультиматума (возможно, бот не в чате врага).")
 
@@ -1176,23 +1180,21 @@ async def alliance_callbacks(callback: types.CallbackQuery):
     parts = callback.data.split('_')
     action = parts[1]
     sender_clan_id = parts[2]
-    target_leader_id = parts[3]
+    target_clan_id = parts[3]
     user_id = str(callback.from_user.id)
     
-    if user_id != target_leader_id:
+    target_clan = get_db_ref(f'clans/{target_clan_id}').get()
+    if not target_clan:
+        await callback.answer("⚠️ Клан не найден.", show_alert=True)
+        return
+
+    if target_clan.get('leader_id') != user_id:
         await callback.answer("⚠️ Только лидер может принимать решения!", show_alert=True)
         return
         
-    user = get_or_create_user(user_id, callback.from_user.username or callback.from_user.first_name)
-    target_clan_id = user.get('clan_id')
-    if not target_clan_id:
-        await callback.answer("⚠️ Вы не состоите в клане.", show_alert=True)
-        return
-        
     sender_clan = get_db_ref(f'clans/{sender_clan_id}').get()
-    target_clan = get_db_ref(f'clans/{target_clan_id}').get()
     
-    if not sender_clan or not target_clan:
+    if not sender_clan:
         await callback.message.edit_text("⚠️ Один из кланов больше не существует.")
         return
         
@@ -1205,7 +1207,7 @@ async def alliance_callbacks(callback: types.CallbackQuery):
         get_db_ref(f'clans/{sender_clan_id}').update({'allies': s_allies})
         get_db_ref(f'clans/{target_clan_id}').update({'allies': t_allies})
         
-        await callback.message.edit_text(f"🤝 Альянс с кланом <b>{html.escape(sender_clan.get('name', ''))}</b> заключен!")
+        await callback.message.edit_text(f"🤝 Альянс между <b>{html.escape(sender_clan.get('name', ''))}</b> и <b>{html.escape(target_clan.get('name', ''))}</b> заключен!")
         if sender_clan.get('chat_id'):
             try:
                 await callback.bot.send_message(sender_clan['chat_id'], f"🤝 Клан <b>{html.escape(target_clan.get('name', ''))}</b> принял ваше предложение об альянсе!")
@@ -1518,17 +1520,17 @@ async def propose_alliance(message: types.Message):
         return
         
     builder = InlineKeyboardBuilder()
-    builder.button(text="✅ Принять", callback_data=f"ally_acc_{clan_id}_{target_clan['leader_id']}")
-    builder.button(text="❌ Отклонить", callback_data=f"ally_dec_{clan_id}_{target_clan['leader_id']}")
+    builder.button(text="✅ Принять", callback_data=f"ally_acc_{clan_id}_{target_clan_id}")
+    builder.button(text="❌ Отклонить", callback_data=f"ally_dec_{clan_id}_{target_clan_id}")
     builder.adjust(2)
     
     try:
         await message.bot.send_message(
             target_chat_id,
-            f"🤝 <b>Предложение альянса!</b>\nКлан <b>{html.escape(clan.get('name', ''))}</b> предлагает вам альянс.",
+            f"🤝 <b>Предложение альянса!</b>\nКлан <b>{html.escape(clan.get('name', ''))}</b> предлагает альянс клану <b>{html.escape(target_clan.get('name', ''))}</b>.",
             reply_markup=builder.as_markup()
         )
-        await message.answer("✅ Предложение отправлено!")
+        await message.answer(f"✅ Предложение альянса отправлено клану <b>{html.escape(target_clan.get('name', ''))}</b>!")
     except Exception as e:
         await message.answer("⚠️ Не удалось отправить предложение (возможно, бот не состоит в их группе).")
 
