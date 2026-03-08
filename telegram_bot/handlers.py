@@ -1397,9 +1397,12 @@ async def clan_callbacks(callback: types.CallbackQuery):
     elif action == "delete":
         # Delete clan logic
         if not is_leader: return
-        # Simple confirmation or just delete? Let's just delete for simplicity or add confirm later.
-        # Previous code had confirm. I'll just delete to save tokens or add simple confirm.
-        # Let's just delete.
+        builder = InlineKeyboardBuilder()
+        builder.button(text="✅ Подтвердить удаление", callback_data=f"c_confirm_delete_{user_id}")
+        builder.button(text="🔙 Отмена", callback_data=f"c_main_{user_id}")
+        await callback.message.edit_text("⚠️ Вы уверены, что хотите распустить клан?", reply_markup=builder.as_markup())
+    elif action == "confirm_delete":
+        if not is_leader: return
         all_users = get_db_ref('users').get() or {}
         for uid, udata in all_users.items():
             if udata.get('clan_id') == clan_id:
@@ -1949,19 +1952,18 @@ async def launch(message: types.Message):
 @router.message(AdminStates.waiting_for_factory)
 async def process_add_factory(message: types.Message, state: FSMContext):
     try:
-        clan_id, ftype, amount = message.text.split()
+        query, ftype, amount = message.text.split()
         amount = int(amount)
-        clan_ref = get_db_ref(f'clans/{clan_id}')
-        clan = clan_ref.get()
-        if not clan:
+        clan_id, clan_data = get_clan_by_tag_or_id(query)
+        if not clan_id:
             await message.answer("⚠️ Клан не найден.")
         else:
             field = 'factory_weapon'
             if ftype == '2': field = 'factory_finance'
             elif ftype == '3': field = 'factory_defense'
-            current = clan.get(field, 0)
-            clan_ref.update({field: current + amount})
-            await message.answer(f"✅ Добавлено {amount} заводов (тип {ftype}) клану {clan_id}.")
+            current = clan_data.get(field, 0)
+            get_db_ref(f'clans/{clan_id}').update({field: current + amount})
+            await message.answer(f"✅ Добавлено {amount} заводов (тип {ftype}) клану {html.escape(clan_data.get('name', clan_id))}.")
     except:
         await message.answer("⚠️ Ошибка формата.")
     await state.clear()
@@ -1970,21 +1972,71 @@ async def process_add_factory(message: types.Message, state: FSMContext):
 @router.message(AdminStates.waiting_for_rocket)
 async def process_add_rocket(message: types.Message, state: FSMContext):
     try:
-        clan_id, rtype, amount = message.text.split()
+        query, rtype, amount = message.text.split()
         amount = int(amount)
-        clan_ref = get_db_ref(f'clans/{clan_id}')
-        clan = clan_ref.get()
-        if not clan:
+        clan_id, clan_data = get_clan_by_tag_or_id(query)
+        if not clan_id:
             await message.answer("⚠️ Клан не найден.")
         else:
             field = 'prog_ballistic' if rtype == '1' else 'prog_nuclear'
-            current = clan.get(field, 0)
-            clan_ref.update({field: current + amount})
-            await message.answer(f"✅ Добавлен прогресс {amount} (тип {rtype}) клану {clan_id}.")
+            current = clan_data.get(field, 0)
+            get_db_ref(f'clans/{clan_id}').update({field: current + amount})
+            await message.answer(f"✅ Добавлен прогресс {amount} (тип {rtype}) клану {html.escape(clan_data.get('name', clan_id))}.")
     except:
         await message.answer("⚠️ Ошибка формата.")
     await state.clear()
     await show_admin_panel(message, page=2)
+
+@router.message(Command("промокод"))
+async def promo(message: types.Message):
+    if message.chat.type != 'private':
+        await message.answer("⚠️ Промокоды можно вводить только в ЛС бота.")
+        return
+    
+    args = message.text.split(maxsplit=1)
+    if len(args) < 2:
+        await message.answer("⚠️ Введите промокод: /промокод имя2105")
+        return
+        
+    code = args[1]
+    if code != "имя2105":
+        await message.answer("⚠️ Неверный промокод.")
+        return
+    
+    uid = str(message.from_user.id)
+    promo_ref = get_db_ref(f'promocodes/{code}')
+    used_by = promo_ref.get()
+    if used_by:
+        await message.answer("⚠️ Промокод уже использован.")
+        return
+    
+    user_ref = get_db_ref(f'users/{uid}')
+    user = user_ref.get() or {}
+    user_ref.update({'gold': user.get('gold', 0) + 1000})
+    promo_ref.set({'used_by': uid})
+    await message.answer("✅ Промокод активирован! Вам начислено 1000 монет.")
+
+@router.message(Command("работа2"))
+async def work2(message: types.Message):
+    if not is_bot_active(): return
+    uid = str(message.from_user.id)
+    user = get_or_create_user(uid, message.from_user.username or message.from_user.first_name)
+    
+    now = datetime.now()
+    if user.get('last_work2'):
+        last_t = datetime.fromisoformat(user['last_work2'])
+        if now - last_t < timedelta(hours=17):
+            rem = timedelta(hours=17) - (now - last_t)
+            await message.answer(f"⏳ КД! Осталось: {rem.seconds//3600}ч {(rem.seconds//60)%60}м")
+            return
+            
+    earnings = random.randint(210, 410)
+    get_db_ref(f'users/{uid}').update({
+        'gold': user.get('gold', 0) + earnings,
+        'last_work2': now.isoformat()
+    })
+    await message.answer(f"🔨 Вы заработали {earnings} монет!")
+
 
 
 
