@@ -1,4 +1,5 @@
 import logging
+import html
 from datetime import datetime, timedelta
 from aiogram import Router, types, F
 from aiogram.filters import Command
@@ -103,7 +104,7 @@ async def create_clan(message: types.Message):
     clan_id = new_clan_ref.key
     
     get_db_ref(f'users/{user_id}').update({'clan_id': clan_id})
-    await message.answer(f"✅ Клан <b>{name}</b> [{tag}] успешно создан!\nВы стали лидером.")
+    await message.answer(f"✅ Клан <b>{html.escape(name)}</b> [{html.escape(tag)}] успешно создан!\nВы стали лидером.")
 
 @router.message(Command("вступить", prefix="!"))
 async def join_clan(message: types.Message):
@@ -141,7 +142,7 @@ async def join_clan(message: types.Message):
         return
         
     get_db_ref(f'users/{user_id}').update({'clan_id': target_clan_id})
-    await message.answer(f"✅ Вы успешно вступили в клан <b>{target_clan['name']}</b>!")
+    await message.answer(f"✅ Вы успешно вступили в клан <b>{html.escape(target_clan['name'])}</b>!")
 
 @router.message(Command("выйти", prefix="!"))
 async def leave_clan(message: types.Message):
@@ -187,7 +188,7 @@ async def my_clan(message: types.Message):
         war_status = "ВОЙНА ⚔️"
         
     text = (
-        f"🛡 <b>Клан:</b> {clan.get('name')} [{clan.get('tag')}]\n"
+        f"🛡 <b>Клан:</b> {html.escape(clan.get('name', ''))} [{html.escape(clan.get('tag', ''))}]\n"
         f"👑 <b>Лидер:</b> <a href='tg://user?id={clan.get('leader_id')}'>Лидер</a>\n"
         f"👥 <b>Участники:</b> {members_count} / {clan.get('population_limit', 10)}\n"
         f"⚔️ <b>Армия клана:</b> {total_army}\n"
@@ -382,7 +383,7 @@ async def declare_war(message: types.Message):
     get_db_ref(f'clans/{attacker_id}').update({'war_id': war_id})
     get_db_ref(f'clans/{defender_id}').update({'war_id': war_id})
     
-    await message.answer(f"⚔️ Клан <b>{attacker['name']}</b> объявил войну клану <b>{defender['name']}</b>!\nГотовьтесь к битвам!")
+    await message.answer(f"⚔️ Клан <b>{html.escape(attacker['name'])}</b> объявил войну клану <b>{html.escape(defender['name'])}</b>!\nГотовьтесь к битвам!")
 
 @router.message(F.text.lower() == "!белый мир")
 async def white_peace(message: types.Message):
@@ -533,7 +534,7 @@ async def annex(message: types.Message):
         get_db_ref(f'users/{loser_users[i]}').update({'clan_id': clan_id})
         
     war_ref.delete()
-    await message.answer(f"⚔️ Вы успешно аннексировали часть территории клана <b>{loser.get('name')}</b>! Получено золото и новые участники.")
+    await message.answer(f"⚔️ Вы успешно аннексировали часть территории клана <b>{html.escape(loser.get('name', ''))}</b>! Получено золото и новые участники.")
 
 @router.message()
 async def handle_all(message: types.Message):

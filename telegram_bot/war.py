@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import html
 from datetime import datetime, timedelta
 from firebase_db import get_db_ref
 from config import WAR_TICK_HOURS
@@ -47,14 +48,14 @@ async def process_wars(bot):
                 # Defender takes damage
                 new_hp = max(0, defender.get('capital_hp', 1000) - damage)
                 get_db_ref(f'clans/{defender_id}').update({'capital_hp': new_hp})
-                msg = f"🔥 Клан <b>{attacker['name']}</b> прорвал оборону! Столица <b>{defender['name']}</b> получила {damage} урона. (Осталось: {new_hp} HP)"
+                msg = f"🔥 Клан <b>{html.escape(attacker['name'])}</b> прорвал оборону! Столица <b>{html.escape(defender['name'])}</b> получила {damage} урона. (Осталось: {new_hp} HP)"
             elif damage < 0:
                 # Attacker takes damage
                 new_hp = max(0, attacker.get('capital_hp', 1000) - abs(damage))
                 get_db_ref(f'clans/{attacker_id}').update({'capital_hp': new_hp})
-                msg = f"🛡️ Клан <b>{defender['name']}</b> отразил атаку! Столица <b>{attacker['name']}</b> получила {abs(damage)} урона. (Осталось: {new_hp} HP)"
+                msg = f"🛡️ Клан <b>{html.escape(defender['name'])}</b> отразил атаку! Столица <b>{html.escape(attacker['name'])}</b> получила {abs(damage)} урона. (Осталось: {new_hp} HP)"
             else:
-                msg = f"⚔️ Битва между <b>{attacker['name']}</b> и <b>{defender['name']}</b> завершилась вничью. Никто не получил урона."
+                msg = f"⚔️ Битва между <b>{html.escape(attacker['name'])}</b> и <b>{html.escape(defender['name'])}</b> завершилась вничью. Никто не получил урона."
                 
             get_db_ref(f'wars/{war_id}').update({'last_tick': now.isoformat()})
             
