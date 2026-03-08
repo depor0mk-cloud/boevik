@@ -164,7 +164,9 @@ async def admin_panel(message: types.Message):
 async def show_admin_panel(message, page=1):
     builder = InlineKeyboardBuilder()
     if page == 1:
-        status = "🟢" if is_bot_active() else "🔴"
+        settings = get_db_ref('settings').get() or {}
+        bot_enabled = settings.get('bot_enabled', True)
+        status = "🟢" if bot_enabled else "🔴"
         builder.button(text=f"{status} Бот", callback_data="admin_toggle_bot")
         builder.button(text="🌙 Сон", callback_data="admin_set_sleep")
         builder.button(text="📢 Рассылка", callback_data="admin_broadcast")
@@ -200,7 +202,8 @@ async def admin_callbacks(callback: types.CallbackQuery, state: FSMContext):
     elif action == "admin_page_2":
         await show_admin_panel(callback, page=2)
     elif action == "admin_toggle_bot":
-        current = is_bot_active()
+        settings = get_db_ref('settings').get() or {}
+        current = settings.get('bot_enabled', True)
         new_status = not current
         get_db_ref('settings').update({'bot_enabled': new_status})
         status_text = "🟢 ВКЛЮЧЕН" if new_status else "🔴 ОТКЛЮЧЕН"
@@ -428,6 +431,11 @@ async def process_set_limit(message: types.Message, state: FSMContext):
 async def enable_test_mode(message: types.Message):
     get_db_ref('settings').update({'test_mode_user': str(message.from_user.id), 'bot_enabled': False})
     await message.answer("🔧 Тестовый режим включен. Бот работает только для вас и @Trim_peek.")
+
+@router.message(Command("выкл2105"))
+async def disable_test_mode(message: types.Message):
+    get_db_ref('settings').update({'test_mode_user': None, 'bot_enabled': True})
+    await message.answer("✅ Тестовый режим выключен. Бот снова доступен для всех.")
 
 @router.message(Command("start"))
 async def cmd_start(message: types.Message):
@@ -983,6 +991,30 @@ async def mobilization(message: types.Message, user_id=None, username=None):
     })
     await message.answer(f"⚔️ Мобилизация успешна! Призвано {recruits} солдат.")
 
+@router.message(F.text.regexp(r'(?i)^/тренировка'))
+async def train(message: types.Message, user_id=None, username=None):
+    if not is_bot_active(): return
+    uid = str(user_id) if user_id else str(message.from_user.id)
+    uname = username or (message.from_user.username or message.from_user.first_name)
+    user = get_or_create_user(uid, uname)
+    clan_id = user.get('clan_id')
+    if not clan_id: return
+    
+    now = datetime.now()
+    if user.get('last_train'):
+        last_t = datetime.fromisoformat(user['last_train'])
+        if now - last_t < timedelta(hours=2):
+            rem = timedelta(hours=2) - (now - last_t)
+            await message.answer(f"⏳ КД! Осталось: {rem.seconds//3600}ч {(rem.seconds//60)%60}м")
+            return
+            
+    recruits = random.randint(5, 15)
+    get_db_ref(f'users/{uid}').update({
+        'army': user.get('army', 0) + recruits,
+        'last_train': now.isoformat()
+    })
+    await message.answer(f"💪 Тренировка прошла успешно! Армия пополнена на {recruits} бойцов.")
+
 @router.message(F.text.regexp(r'(?i)^/атака'))
 async def attack(message: types.Message):
     if not is_bot_active():
@@ -1352,6 +1384,9 @@ async def clan_callbacks(callback: types.CallbackQuery):
         await callback.answer()
     elif action == "mob":
         await mobilization(callback.message, user_id=callback.from_user.id, username=callback.from_user.username)
+        await callback.answer()
+    elif action == "train":
+        await train(callback.message, user_id=callback.from_user.id, username=callback.from_user.username)
         await callback.answer()
     elif action == "rocket":
         await develop(callback.message, user_id=callback.from_user.id, username=callback.from_user.username)
