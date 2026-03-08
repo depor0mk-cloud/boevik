@@ -29,19 +29,21 @@ async def cmd_boevik(message: types.Message):
     text = (
         "⚔️ <b>Справочник Клан-Бота</b> ⚔️\n\n"
         "<b>🏰 Управление кланом:</b>\n"
-        "• <code>!создать клан [название] [тег]</code> — Создать новый клан\n"
-        "• <code>!вступить [название или тег]</code> — Присоединиться к клану\n"
-        "• <code>!выйти</code> — Покинуть текущий клан\n"
-        "• <code>!мой клан</code> — Показать статистику вашего клана\n\n"
+        "• <code>/создать клан [название] [тег]</code> — Создать новый клан\n"
+        "• <code>/вступить [название или тег]</code> — Присоединиться к клану\n"
+        "• <code>/выйти</code> — Покинуть текущий клан\n"
+        "• <code>/удалить клан подтверждаю</code> — Удалить свой клан (только лидер)\n"
+        "• <code>/мой клан</code> — Показать статистику вашего клана\n\n"
         "<b>⚔️ Война и Дипломатия:</b>\n"
-        "• <code>!объявить войну [название или тег]</code> — Начать войну с другим кланом (только лидер)\n"
-        "• <code>!белый мир</code> — Предложить или принять белый мир (без потерь, только лидер)\n"
-        "• <code>!капитуляция</code> — Признать поражение (если HP столицы = 0, только лидер)\n"
-        "• <code>!аннексия</code> — Захватить территорию врага (если HP врага &lt; 20%, только лидер)\n\n"
+        "• <code>/объявить войну [название или тег]</code> — Начать войну с другим кланом (только лидер)\n"
+        "• <code>/белый мир</code> — Предложить или принять белый мир (без потерь, только лидер)\n"
+        "• <code>/капитуляция</code> — Признать поражение (если HP столицы = 0, только лидер)\n"
+        "• <code>/аннексия</code> — Захватить территорию врага (если HP врага &lt; 20%, только лидер)\n\n"
         "<b>🏭 Экономика и Армия:</b>\n"
-        "• <code>!мобилизация [кол-во]</code> — Нанять солдат (1-100). КД: 12ч\n"
-        "• <code>!тренировка [сила/защита/здоровье]</code> — Улучшить характеристики клана. КД: 24ч\n"
-        "• <code>!строй завод [оружейный/финансовый/оборонительный]</code> — Построить завод. КД: 48ч\n\n"
+        "• <code>/мобилизация</code> — Нанять солдат (от 50 до 500). КД: 5ч\n"
+        "• <code>/работать</code> — Произвести ресурсы для клана (армия и золото). КД: 4ч\n"
+        "• <code>/тренировка [сила/защита/здоровье]</code> — Улучшить характеристики клана. КД: 24ч\n"
+        "• <code>/строй завод [оружейный/финансовый/оборонительный]</code> — Построить завод. КД: 48ч\n\n"
         "<i>Бот работает в группах! Добавьте его в чат вашего клана.</i>"
     )
     await message.answer(text)
@@ -58,12 +60,12 @@ async def cmd_start(message: types.Message):
 
 # --- Clan Management ---
 
-@router.message(F.text.regexp(r'(?i)^[!/]создать клан'))
+@router.message(F.text.regexp(r'(?i)^/создать клан'))
 async def create_clan(message: types.Message):
     args = message.text.split()
-    # Expecting: !создать клан Name Tag (at least 4 parts)
+    # Expecting: /создать клан Name Tag (at least 4 parts)
     if len(args) < 4:
-        await message.answer("⚠️ Использование: <code>!создать клан [название] [тег]</code>")
+        await message.answer("⚠️ Использование: <code>/создать клан [название] [тег]</code>")
         return
     
     tag = args[-1]
@@ -96,7 +98,7 @@ async def create_clan(message: types.Message):
         'exp': 0,
         'capital_hp': 1000,
         'max_capital_hp': 1000,
-        'population_limit': 10,
+        'population_limit': 15,
         'gold': 0,
         'power_level': 1,
         'defense_level': 1,
@@ -113,11 +115,11 @@ async def create_clan(message: types.Message):
     get_db_ref(f'users/{user_id}').update({'clan_id': clan_id})
     await message.answer(f"✅ Клан <b>{html.escape(name)}</b> [{html.escape(tag)}] успешно создан!\nВы стали лидером.")
 
-@router.message(Command("вступить", prefix="!/"))
+@router.message(Command("вступить", prefix="/"))
 async def join_clan(message: types.Message):
     args = message.text.split(maxsplit=1)
     if len(args) < 2:
-        await message.answer("⚠️ Использование: <code>!вступить [название или тег]</code>")
+        await message.answer("⚠️ Использование: <code>/вступить [название или тег]</code>")
         return
     query = args[1].lower()
     user_id = str(message.from_user.id)
@@ -125,7 +127,7 @@ async def join_clan(message: types.Message):
     
     user = get_or_create_user(user_id, username)
     if user.get('clan_id'):
-        await message.answer("⚠️ Вы уже состоите в клане! Сначала покиньте его (<code>!выйти</code>).")
+        await message.answer("⚠️ Вы уже состоите в клане! Сначала покиньте его (<code>/выйти</code>).")
         return
         
     all_clans = get_db_ref('clans').get() or {}
@@ -144,14 +146,14 @@ async def join_clan(message: types.Message):
     all_users = get_db_ref('users').get() or {}
     members_count = sum(1 for u in all_users.values() if u.get('clan_id') == target_clan_id)
     
-    if members_count >= target_clan.get('population_limit', 10):
+    if members_count >= target_clan.get('population_limit', 15):
         await message.answer("⚠️ В клане нет мест! Лидер должен построить больше заводов.")
         return
         
     get_db_ref(f'users/{user_id}').update({'clan_id': target_clan_id})
     await message.answer(f"✅ Вы успешно вступили в клан <b>{html.escape(target_clan['name'])}</b>!")
 
-@router.message(Command("выйти", prefix="!/"))
+@router.message(Command("выйти", prefix="/"))
 async def leave_clan(message: types.Message):
     user_id = str(message.from_user.id)
     user = get_or_create_user(user_id, message.from_user.username or message.from_user.first_name)
@@ -163,13 +165,47 @@ async def leave_clan(message: types.Message):
         
     clan = get_db_ref(f'clans/{clan_id}').get()
     if clan and clan.get('leader_id') == user_id:
-        await message.answer("⚠️ Вы лидер клана! Вы не можете выйти. Распустите клан или передайте лидерство (в разработке).")
+        await message.answer("⚠️ Вы лидер клана! Вы не можете просто выйти. Используйте <code>/удалить клан подтверждаю</code>, чтобы распустить клан.")
         return
         
     get_db_ref(f'users/{user_id}').update({'clan_id': None, 'army': 0})
     await message.answer("🚪 Вы покинули клан.")
 
-@router.message(F.text.regexp(r'(?i)^[!/]мой клан'))
+@router.message(F.text.regexp(r'(?i)^/удалить клан'))
+async def delete_clan(message: types.Message):
+    args = message.text.split()
+    if len(args) < 3 or args[2].lower() != "подтверждаю":
+        await message.answer("⚠️ Вы уверены, что хотите удалить клан? Это действие необратимо!\nДля подтверждения введите: <code>/удалить клан подтверждаю</code>")
+        return
+        
+    user_id = str(message.from_user.id)
+    user = get_or_create_user(user_id, message.from_user.username or message.from_user.first_name)
+    clan_id = user.get('clan_id')
+    
+    if not clan_id:
+        await message.answer("⚠️ Вы не состоите в клане.")
+        return
+        
+    clan = get_db_ref(f'clans/{clan_id}').get()
+    if clan.get('leader_id') != user_id:
+        await message.answer("⚠️ Только лидер может удалить клан!")
+        return
+        
+    if clan.get('war_id'):
+        await message.answer("⚠️ Вы не можете распустить клан во время войны! Сначала заключите мир или капитулируйте.")
+        return
+        
+    # Kick all members
+    all_users = get_db_ref('users').get() or {}
+    for uid, udata in all_users.items():
+        if udata.get('clan_id') == clan_id:
+            get_db_ref(f'users/{uid}').update({'clan_id': None, 'army': 0})
+            
+    # Delete clan
+    get_db_ref(f'clans/{clan_id}').delete()
+    await message.answer(f"💥 Клан <b>{html.escape(clan.get('name', ''))}</b> был распущен.")
+
+@router.message(F.text.regexp(r'(?i)^/мой клан'))
 async def my_clan(message: types.Message):
     user_id = str(message.from_user.id)
     user = get_or_create_user(user_id, message.from_user.username or message.from_user.first_name)
@@ -201,7 +237,7 @@ async def my_clan(message: types.Message):
     text = (
         f"🛡 <b>Клан:</b> {html.escape(clan.get('name', ''))} [{html.escape(clan.get('tag', ''))}]\n"
         f"👑 <b>Лидер:</b> <a href='tg://user?id={clan.get('leader_id')}'>Лидер</a>\n"
-        f"👥 <b>Участники:</b> {members_count} / {clan.get('population_limit', 10)}\n"
+        f"👥 <b>Участники:</b> {members_count} / {clan.get('population_limit', 15)}\n"
         f"⚔️ <b>Армия клана:</b> {total_army}\n"
         f"🏰 <b>Столица:</b> {clan.get('capital_hp', 1000)} / {clan.get('max_capital_hp', 1000)} HP\n"
         f"💰 <b>Золото:</b> {clan.get('gold', 0)}\n"
@@ -216,17 +252,10 @@ async def my_clan(message: types.Message):
 
 # --- Economy & Army ---
 
-@router.message(Command("мобилизация", prefix="!/"))
+import random
+
+@router.message(Command("мобилизация", prefix="/"))
 async def mobilize(message: types.Message):
-    args = message.text.split()
-    if len(args) < 2 or not args[1].isdigit():
-        await message.answer("⚠️ Использование: <code>!мобилизация [количество от 1 до 100]</code>")
-        return
-    amount = int(args[1])
-    if not (1 <= amount <= 100):
-        await message.answer("⚠️ Количество должно быть от 1 до 100.")
-        return
-        
     user_id = str(message.from_user.id)
     user = get_or_create_user(user_id, message.from_user.username or message.from_user.first_name)
     if not user.get('clan_id'):
@@ -236,11 +265,12 @@ async def mobilize(message: types.Message):
     now = datetime.now()
     if user.get('last_mobilization'):
         last_mob = datetime.fromisoformat(user['last_mobilization'])
-        if now - last_mob < timedelta(hours=12):
-            rem = timedelta(hours=12) - (now - last_mob)
+        if now - last_mob < timedelta(hours=5):
+            rem = timedelta(hours=5) - (now - last_mob)
             await message.answer(f"⏳ КД на мобилизацию! Осталось: {rem.seconds//3600}ч {(rem.seconds//60)%60}м")
             return
             
+    amount = random.randint(50, 500)
     new_army = user.get('army', 0) + amount
     get_db_ref(f'users/{user_id}').update({
         'army': new_army,
@@ -248,12 +278,45 @@ async def mobilize(message: types.Message):
     })
     await message.answer(f"⚔️ Вы успешно мобилизовали {amount} солдат в армию клана!")
 
-@router.message(Command("тренировка", prefix="!/"))
+@router.message(Command("работать", prefix="/"))
+async def work(message: types.Message):
+    user_id = str(message.from_user.id)
+    user = get_or_create_user(user_id, message.from_user.username or message.from_user.first_name)
+    clan_id = user.get('clan_id')
+    if not clan_id:
+        await message.answer("⚠️ Вы не состоите в клане.")
+        return
+        
+    now = datetime.now()
+    if user.get('last_work'):
+        last_work = datetime.fromisoformat(user.get('last_work'))
+        if now - last_work < timedelta(hours=4):
+            rem = timedelta(hours=4) - (now - last_work)
+            await message.answer(f"⏳ Вы устали! Следующая смена через: {rem.seconds//3600}ч {(rem.seconds//60)%60}м")
+            return
+            
+    army_gain = random.randint(10, 50)
+    gold_gain = random.randint(10, 50)
+    
+    new_army = user.get('army', 0) + army_gain
+    get_db_ref(f'users/{user_id}').update({
+        'army': new_army,
+        'last_work': now.isoformat()
+    })
+    
+    clan_ref = get_db_ref(f'clans/{clan_id}')
+    clan = clan_ref.get()
+    new_gold = clan.get('gold', 0) + gold_gain
+    clan_ref.update({'gold': new_gold})
+    
+    await message.answer(f"🏭 Вы поработали на благо клана!\nПроизведено солдат: {army_gain}\nЗаработано золота: {gold_gain}")
+
+@router.message(Command("тренировка", prefix="/"))
 async def train(message: types.Message):
     args = message.text.split()
     valid_stats = ['сила', 'защита', 'здоровье']
     if len(args) < 2 or args[1].lower() not in valid_stats:
-        await message.answer("⚠️ Использование: <code>!тренировка [сила/защита/здоровье]</code>")
+        await message.answer("⚠️ Использование: <code>/тренировка [сила/защита/здоровье]</code>")
         return
     stat = args[1].lower()
     
@@ -286,13 +349,13 @@ async def train(message: types.Message):
     
     await message.answer(f"💪 Вы успешно потренировали клан! Навык <b>{stat}</b> повышен до {new_level}.")
 
-@router.message(F.text.regexp(r'(?i)^[!/]строй завод'))
+@router.message(F.text.regexp(r'(?i)^/строй завод'))
 async def build_factory(message: types.Message):
     args = message.text.split()
-    # Expecting: !строй завод type
+    # Expecting: /строй завод type
     valid_types = ['оружейный', 'финансовый', 'оборонительный']
     if len(args) < 3 or args[2].lower() not in valid_types:
-        await message.answer("⚠️ Использование: <code>!строй завод [оружейный/финансовый/оборонительный]</code>")
+        await message.answer("⚠️ Использование: <code>/строй завод [оружейный/финансовый/оборонительный]</code>")
         return
     ftype = args[2].lower()
     
@@ -320,7 +383,7 @@ async def build_factory(message: types.Message):
     clan = clan_ref.get()
     
     new_factory_count = clan.get(field, 0) + 1
-    new_pop_limit = clan.get('population_limit', 10) + 1
+    new_pop_limit = clan.get('population_limit', 15) + 1
     
     clan_ref.update({
         field: new_factory_count,
@@ -332,12 +395,12 @@ async def build_factory(message: types.Message):
 
 # --- War System ---
 
-@router.message(F.text.regexp(r'(?i)^[!/]объявить войну'))
+@router.message(F.text.regexp(r'(?i)^/объявить войну'))
 async def declare_war(message: types.Message):
     args = message.text.split(maxsplit=2)
-    # Expecting: !объявить войну Target
+    # Expecting: /объявить войну Target
     if len(args) < 3:
-        await message.answer("⚠️ Использование: <code>!объявить войну [название или тег клана]</code>")
+        await message.answer("⚠️ Использование: <code>/объявить войну [название или тег клана]</code>")
         return
     target_query = args[2].lower()
     
@@ -396,7 +459,7 @@ async def declare_war(message: types.Message):
     
     await message.answer(f"⚔️ Клан <b>{html.escape(attacker['name'])}</b> объявил войну клану <b>{html.escape(defender['name'])}</b>!\nГотовьтесь к битвам!")
 
-@router.message(F.text.regexp(r'(?i)^[!/]белый мир'))
+@router.message(F.text.regexp(r'(?i)^/белый мир'))
 async def white_peace(message: types.Message):
     user_id = str(message.from_user.id)
     user = get_or_create_user(user_id, message.from_user.username or message.from_user.first_name)
@@ -436,9 +499,9 @@ async def white_peace(message: types.Message):
     else:
         # Offer peace
         war_ref.update({'white_peace_offer': clan_id})
-        await message.answer("🕊 Вы предложили белый мир. Чтобы он вступил в силу, лидер вражеского клана должен также написать <code>!белый мир</code>.")
+        await message.answer("🕊 Вы предложили белый мир. Чтобы он вступил в силу, лидер вражеского клана должен также написать <code>/белый мир</code>.")
 
-@router.message(Command("капитуляция", prefix="!/"))
+@router.message(Command("капитуляция", prefix="/"))
 async def capitulate(message: types.Message):
     user_id = str(message.from_user.id)
     user = get_or_create_user(user_id, message.from_user.username or message.from_user.first_name)
@@ -491,7 +554,7 @@ async def capitulate(message: types.Message):
     war_ref.delete()
     await message.answer(f"🏳️ Ваш клан капитулировал! Вы потеряли 50% опыта, часть заводов и {stolen_gold} золота.")
 
-@router.message(Command("аннексия", prefix="!/"))
+@router.message(Command("аннексия", prefix="/"))
 async def annex(message: types.Message):
     user_id = str(message.from_user.id)
     user = get_or_create_user(user_id, message.from_user.username or message.from_user.first_name)
@@ -533,7 +596,7 @@ async def annex(message: types.Message):
     get_db_ref(f'clans/{clan_id}').update({
         'gold': clan.get('gold', 0) + stolen_gold,
         'war_id': None,
-        'population_limit': clan.get('population_limit', 10) + 1
+        'population_limit': clan.get('population_limit', 15) + 1
     })
     
     # Transfer some users
@@ -549,8 +612,8 @@ async def annex(message: types.Message):
 
 @router.message()
 async def handle_all(message: types.Message):
-    # Ignore messages that don't start with ! or / to avoid spam in groups
-    if not message.text or not (message.text.startswith('!') or message.text.startswith('/')):
+    # Ignore messages that don't start with / to avoid spam in groups
+    if not message.text or not message.text.startswith('/'):
         return
     logging.info(f"Received unhandled command: {message.text}")
     # await message.answer("Я не понимаю эту команду. Используйте /boevik для списка команд.")
