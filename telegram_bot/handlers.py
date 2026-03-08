@@ -398,7 +398,7 @@ async def cmd_start(message: types.Message):
         "Я — Клан-Бот, твой верный помощник в управлении кланом и ведении войн.\n"
         "Создавай свой клан, нанимай армию, строй заводы и сражайся за господство!\n\n"
         "📜 <b>Основные команды:</b>\n"
-        "• /создать клан [название] [тег] — Основать новый клан (1000 монет)\n"
+        "• /создать клан [название] [тег] — Основать новый клан\n"
         "• /вступить [название/тег/номер] — Присоединиться к существующему клану\n"
         "• /клан — Информация о твоем клане\n"
         "• /профиль — Твоя личная статистика\n"
@@ -415,10 +415,11 @@ async def cmd_boevik(message: types.Message):
     text = (
         "⚔️ <b>Справочник Клан-Бота</b> ⚔️\n\n"
         "<b>🏰 Управление кланом:</b>\n"
-        "• <code>/создать клан [имя] [тег]</code> — Создать клан (1000 💰)\n"
+        "• <code>/создать клан [имя] [тег]</code> — Создать клан\n"
         "• <code>/вступить [тег/номер]</code> — Вступить в клан\n"
         "• <code>/клан</code> — Меню клана\n"
         "• <code>/выйти</code> — Покинуть клан\n"
+        "• <code>/удалить клан</code> — Удалить клан (только лидер)\n"
         "• <code>/кик [id]</code> — Исключить игрока (только лидер)\n"
         "• <code>/повысить [id]</code> — Передать лидерство\n"
         "• <code>/список кланов</code> — Топ кланов чата\n"
@@ -426,8 +427,6 @@ async def cmd_boevik(message: types.Message):
         "<b>💰 Экономика:</b>\n"
         "• <code>/подработка</code> — Мелкий заработок (КД 30 мин)\n"
         "• <code>/устроиться</code> — Крупный заработок (КД 6 ч)\n"
-        "• <code>/казна [сумма]</code> — Положить деньги в клан\n"
-        "• <code>/снять [сумма]</code> — Снять деньги (лидер)\n"
         "• <code>/строй завод</code> — Строительство (лидер, КД 10 мин)\n\n"
         "<b>⚔️ Война:</b>\n"
         "• <code>/объявить войну [клан]</code> — Начать войну\n"
@@ -703,67 +702,6 @@ async def promote_member(message: types.Message):
     get_db_ref(f'clans/{clan_id}').update({'leader_id': target_id})
     name = target_user.get('username', target_id)
     await message.answer(f"✅ Лидерство передано игроку {format_user_link(target_id, name)}.")
-
-
-
-@router.message(F.text.regexp(r'(?i)^/казна'))
-async def deposit(message: types.Message):
-    if not is_bot_active(): return
-    args = message.text.split()
-    if len(args) < 2 or not args[1].isdigit():
-        await message.answer("⚠️ Использование: <code>/казна [сумма]</code>")
-        return
-    amount = int(args[1])
-    if amount <= 0: return
-    
-    user_id = str(message.from_user.id)
-    user = get_or_create_user(user_id, message.from_user.username or message.from_user.first_name)
-    clan_id = user.get('clan_id')
-    if not clan_id:
-        await message.answer("⚠️ Вы не в клане.")
-        return
-        
-    # Assuming user has no personal wallet in this version, or we just add to clan "from air" if no personal balance logic exists.
-    # Based on previous context, users generate gold directly into clan. 
-    # But /казна implies depositing PERSONAL gold. 
-    # Since I don't see personal gold in `get_or_create_user`, I'll assume this command might be for admin or just adding to clan stats if user had gold.
-    # Wait, the user object has `army` but no `gold`. 
-    # I'll skip personal balance check for now and just add to clan, assuming user "found" it or it's a roleplay command.
-    # OR, maybe I should add `gold` to user.
-    # Let's add `gold` to user in `get_or_create_user` next time I edit it, or just assume 0.
-    # For now, let's assume this command adds to clan gold from "external" source or just works.
-    # Actually, usually `/казна` is to deposit. If users don't have gold, this command is useless.
-    # I'll implement it as "add to clan gold" but maybe limit it? 
-    # Let's just add it to clan gold.
-    
-    clan_ref = get_db_ref(f'clans/{clan_id}')
-    clan = clan_ref.get()
-    clan_ref.update({'gold': clan.get('gold', 0) + amount})
-    await message.answer(f"💰 Вы внесли {amount} золота в казну.")
-
-@router.message(F.text.regexp(r'(?i)^/снять'))
-async def withdraw(message: types.Message):
-    if not is_bot_active(): return
-    args = message.text.split()
-    if len(args) < 2 or not args[1].isdigit():
-        await message.answer("⚠️ Использование: <code>/снять [сумма]</code>")
-        return
-    amount = int(args[1])
-    user_id = str(message.from_user.id)
-    user = get_or_create_user(user_id, message.from_user.username or message.from_user.first_name)
-    clan_id = user.get('clan_id')
-    if not clan_id: return
-    clan = get_db_ref(f'clans/{clan_id}').get()
-    if clan.get('leader_id') != user_id:
-        await message.answer("⚠️ Только лидер может снимать деньги.")
-        return
-    if clan.get('gold', 0) < amount:
-        await message.answer("⚠️ Недостаточно средств в казне.")
-        return
-    clan_ref = get_db_ref(f'clans/{clan_id}')
-    clan_ref.update({'gold': clan.get('gold', 0) - amount})
-    await message.answer(f"💸 Вы сняли {amount} золота из казны.")
-
 
 
 @router.message(F.text.regexp(r'(?i)^/объявить войну'))
