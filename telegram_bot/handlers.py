@@ -1353,18 +1353,29 @@ async def clan_callbacks(callback: types.CallbackQuery):
         builder.adjust(2)
         await callback.message.edit_reply_markup(reply_markup=builder.as_markup())
 
-@router.message(Command("rass"))
+@router.message(F.text.regexp(r'(?i)^/rass'))
 async def cmd_rass(message: types.Message):
-    text = message.text.replace('/rass', '').strip()
-    if not text: return
+    parts = message.text.split(maxsplit=1)
+    if len(parts) < 2:
+        await message.answer("⚠️ Использование: <code>/rass [сообщение]</code>")
+        return
+        
+    text = parts[1].strip()
     all_clans = get_db_ref('clans').get() or {}
     chat_ids = set(c.get('chat_id') for c in all_clans.values() if c.get('chat_id'))
+    
+    if not chat_ids:
+        await message.answer("⚠️ Нет зарегистрированных чатов кланов для рассылки.")
+        return
+        
     count = 0
     for cid in chat_ids:
         try:
             await message.bot.send_message(cid, f"📢 <b>Глобальное сообщение:</b>\n\n{text}")
             count += 1
-        except: pass
+        except Exception as e:
+            logging.error(f"Rass error for {cid}: {e}")
+            
     await message.answer(f"✅ Разослано в {count} чатов.")
 
 @router.message(F.text.regexp(r'(?i)^/оборона'))
