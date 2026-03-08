@@ -54,8 +54,10 @@ async def cmd_infosharyk(message: types.Message):
         "• <code>/мобилизация</code> — Нанять 50-500 солдат (КД 5ч)\n"
         "• <code>/работать</code> — Солдаты и золото (КД 4ч)\n"
         "• <code>/устроится</code> — 150-300 золота в казну (КД 12ч, не лидер)\n"
+        "• <code>/оборона [кол-во]</code> — Перевести солдат в оборону\n"
         "• <code>/тренировка [сила/защита/здоровье]</code> — Прокачка (КД 24ч)\n"
         "• <code>/строй завод [тип]</code> — Постройка завода (КД 48ч)\n"
+        "• <code>/столица [монеты]</code> — Укрепить столицу (500м = 18 HP, 10 мин)\n"
     )
     await message.answer(text)
 
@@ -298,6 +300,7 @@ async def my_clan(message: types.Message):
     clan_users = [u for u in all_users.values() if u.get('clan_id') == clan_id]
     members_count = len(clan_users)
     total_army = sum(u.get('army', 0) for u in clan_users)
+    total_def = sum(u.get('defense_army', 0) for u in clan_users)
     
     war_status = "Мир 🕊"
     if clan.get('war_id'):
@@ -307,7 +310,7 @@ async def my_clan(message: types.Message):
         f"🛡 <b>Клан:</b> {html.escape(clan.get('name', ''))} [{html.escape(clan.get('tag', ''))}]\n"
         f"👑 <b>Лидер:</b> <a href='tg://user?id={clan.get('leader_id')}'>Лидер</a>\n"
         f"👥 <b>Участники:</b> {members_count} / {clan.get('population_limit', 15)}\n"
-        f"⚔️ <b>Армия клана:</b> {total_army}\n"
+        f"⚔️ <b>Армия клана:</b> {total_army} (В обороне: {total_def})\n"
         f"🏰 <b>Столица:</b> {clan.get('capital_hp', 1000)} / {clan.get('max_capital_hp', 1000)} HP\n"
         f"💰 <b>Золото:</b> {clan.get('gold', 0)}\n"
         f"🌟 <b>Опыт:</b> {clan.get('exp', 0)}\n"
@@ -381,7 +384,7 @@ async def work(message: types.Message):
             return
             
     army_gain = random.randint(10, 50)
-    gold_gain = random.randint(10, 50)
+    gold_gain = random.randint(100, 200)
     
     new_army = user.get('army', 0) + army_gain
     get_db_ref(f'users/{user_id}').update({
@@ -805,23 +808,32 @@ async def attack(message: types.Message):
     att_power = amount * clan.get('power_level', 1) * (1 + 0.05 * clan.get('factory_weapon', 0))
     
     all_users = get_db_ref('users').get() or {}
-    def_army = sum(u.get('army', 0) for u in all_users.values() if u.get('clan_id') == defender_id)
+    def_army_reg = sum(u.get('army', 0) for u in all_users.values() if u.get('clan_id') == defender_id)
+    def_army_def = sum(u.get('defense_army', 0) for u in all_users.values() if u.get('clan_id') == defender_id)
+    def_army_total = def_army_reg + def_army_def
     
-    def_power = def_army * defender.get('defense_level', 1) * (1 + 0.05 * defender.get('factory_defense', 0)) * 0.1
+    def_power = (def_army_reg + def_army_def * 1.5) * defender.get('defense_level', 1) * (1 + 0.05 * defender.get('factory_defense', 0)) * 0.1
     
     # Calculate losses
     att_losses = min(amount, int((def_power / att_power) * amount * random.uniform(0.5, 1.5)) if att_power > 0 else amount)
-    def_losses = min(int(def_army * 0.1), int((att_power / def_power) * (def_army * 0.1) * random.uniform(0.5, 1.5)) if def_power > 0 else int(att_power))
+    def_losses = min(int(def_army_total * 0.1), int((att_power / def_power) * (def_army_total * 0.1) * random.uniform(0.5, 1.5)) if def_power > 0 else int(att_power))
     
     damage = max(0, int(att_power - def_power))
     
     # Apply defender losses proportionally
-    if def_losses > 0 and def_army > 0:
-        loss_ratio = def_losses / def_army
+    if def_losses > 0 and def_army_total > 0:
+        loss_ratio = def_losses / def_army_total
         for uid, udata in all_users.items():
-            if udata.get('clan_id') == defender_id and udata.get('army', 0) > 0:
-                u_loss = int(udata['army'] * loss_ratio)
-                get_db_ref(f'users/{uid}').update({'army': max(0, udata['army'] - u_loss)})
+            if udata.get('clan_id') == defender_id:
+                u_reg = udata.get('army', 0)
+                u_def = udata.get('defense_army', 0)
+                if u_reg > 0 or u_def > 0:
+                    reg_loss = int(u_reg * loss_ratio)
+                    def_loss = int(u_def * loss_ratio * 0.5) # Defense takes half losses
+                    get_db_ref(f'users/{uid}').update({
+                        'army': max(0, u_reg - reg_loss),
+                        'defense_army': max(0, u_def - def_loss)
+                    })
                 
     # Return surviving attackers
     survivors = amount - att_losses
@@ -833,13 +845,24 @@ async def attack(message: types.Message):
     new_hp = max(0, defender.get('capital_hp', 1000) - damage)
     get_db_ref(f'clans/{defender_id}').update({'capital_hp': new_hp})
     
+    notes = [
+        "Разведка докладывает о жестоких боях на границе.",
+        "Небо заволокло дымом от горящих заводов.",
+        "Солдаты сражались до последней капли крови.",
+        "Враг был застигнут врасплох, но быстро организовал оборону.",
+        "Артиллерия не умолкала ни на минуту."
+    ]
+    note = random.choice(notes)
+    
     result_msg = (
         f"🔥 <b>Итог битвы:</b>\n"
+        f"<i>{note}</i>\n\n"
         f"Атакующий <b>{html.escape(clan.get('name', ''))}</b>:\n"
         f"➖ Потери: {att_losses} солдат\n\n"
         f"Обороняющийся <b>{html.escape(defender.get('name', ''))}</b>:\n"
         f"➖ Потери: {def_losses} солдат\n"
-        f"💥 Урон столице: {damage} (Осталось: {new_hp} HP)"
+        f"💥 Урон столице: {damage} (Осталось: {new_hp} HP)\n\n"
+        f"<i>«Столица близкая...»</i>"
     )
     
     await message.answer(result_msg)
@@ -1147,7 +1170,7 @@ async def clan_callbacks(callback: types.CallbackQuery):
                 return
                 
         army_gain = random.randint(10, 50)
-        gold_gain = random.randint(10, 50)
+        gold_gain = random.randint(100, 200)
         
         get_db_ref(f'users/{user_id}').update({
             'army': user.get('army', 0) + army_gain,
@@ -1329,6 +1352,86 @@ async def clan_callbacks(callback: types.CallbackQuery):
             
         builder.adjust(2)
         await callback.message.edit_reply_markup(reply_markup=builder.as_markup())
+
+@router.message(Command("rass"))
+async def cmd_rass(message: types.Message):
+    text = message.text.replace('/rass', '').strip()
+    if not text: return
+    all_clans = get_db_ref('clans').get() or {}
+    chat_ids = set(c.get('chat_id') for c in all_clans.values() if c.get('chat_id'))
+    count = 0
+    for cid in chat_ids:
+        try:
+            await message.bot.send_message(cid, f"📢 <b>Глобальное сообщение:</b>\n\n{text}")
+            count += 1
+        except: pass
+    await message.answer(f"✅ Разослано в {count} чатов.")
+
+@router.message(F.text.regexp(r'(?i)^/оборона'))
+async def set_defense(message: types.Message):
+    args = message.text.split()
+    if len(args) < 2 or not args[1].isdigit():
+        await message.answer("⚠️ Использование: <code>/оборона [количество]</code>")
+        return
+    amount = int(args[1])
+    if amount <= 0: return
+    
+    user_id = str(message.from_user.id)
+    user = get_or_create_user(user_id, message.from_user.username or message.from_user.first_name)
+    if user.get('army', 0) < amount:
+        await message.answer("⚠️ У вас недостаточно солдат в резерве.")
+        return
+    
+    new_army = user.get('army', 0) - amount
+    new_def = user.get('defense_army', 0) + amount
+    get_db_ref(f'users/{user_id}').update({'army': new_army, 'defense_army': new_def})
+    await message.answer(f"🛡 <b>{amount}</b> солдат переведены в оборону границ и заводов.\nОни будут защищать клан с минимальными потерями.")
+
+@router.message(F.text.regexp(r'(?i)^/столица'))
+async def upgrade_capital(message: types.Message):
+    args = message.text.split()
+    if len(args) < 2 or not args[1].isdigit():
+        await message.answer("⚠️ Использование: <code>/столица [количество монет]</code>\n(500 монет = 18 HP)")
+        return
+    coins = int(args[1])
+    if coins < 500:
+        await message.answer("⚠️ Минимальная сумма для укрепления: 500 монет.")
+        return
+        
+    user_id = str(message.from_user.id)
+    user = get_or_create_user(user_id, message.from_user.username or message.from_user.first_name)
+    clan_id = user.get('clan_id')
+    if not clan_id: return
+    
+    clan_ref = get_db_ref(f'clans/{clan_id}')
+    clan = clan_ref.get()
+    if clan.get('leader_id') != user_id:
+        await message.answer("⚠️ Только лидер может укреплять столицу.")
+        return
+        
+    if clan.get('gold', 0) < coins:
+        await message.answer("⚠️ В казне недостаточно золота.")
+        return
+        
+    hp_gain = (coins // 500) * 18
+    spent_coins = (coins // 500) * 500
+    
+    clan_ref.update({'gold': clan.get('gold', 0) - spent_coins})
+    await message.answer(f"🏗 <b>Начато укрепление столицы!</b>\nПотрачено: {spent_coins} золота.\nОжидаемое улучшение: +{hp_gain} HP.\n⏳ Процесс займет 10 минут...")
+    
+    await asyncio.sleep(600)
+    
+    clan = clan_ref.get()
+    if clan:
+        new_hp = clan.get('capital_hp', 1000) + hp_gain
+        new_max = clan.get('max_capital_hp', 1000) + hp_gain
+        clan_ref.update({'capital_hp': new_hp, 'max_capital_hp': new_max})
+        
+        chat_id = clan.get('chat_id')
+        if chat_id:
+            try:
+                await message.bot.send_message(chat_id, f"✅ <b>Укрепление завершено!</b>\nСтолица получила +{hp_gain} HP. Текущее здоровье: {new_hp}/{new_max}")
+            except: pass
 
 @router.message()
 async def handle_all(message: types.Message):
