@@ -34,12 +34,14 @@ async def cmd_infosharyk(message: types.Message):
         "📖 <b>Полный список команд (Скрытый справочник):</b>\n\n"
         "<b>🏰 Управление:</b>\n"
         "• <code>/создать клан [название] [тег]</code> — Создать клан\n"
-        "• <code>/вступить [название или тег]</code> — Вступить в клан\n"
+        "• <code>/вступить [название или тег или номер]</code> — Вступить в клан\n"
         "• <code>/выйти</code> — Выйти из клана\n"
         "• <code>/удалить клан подтверждаю</code> — Удалить клан (лидер)\n"
         "• <code>/мой клан</code> — Статистика и инлайн-меню\n"
         "• <code>/список кланов</code> — Кланы в текущей группе\n\n"
-        "<b>⚔️ Война:</b>\n"
+        "<b>⚔️ Война и Дипломатия:</b>\n"
+        "• <code>/предложить альянс [цель]</code> — Предложить союз\n"
+        "• <code>/разорвать альянс [цель]</code> — Расторгнуть союз\n"
         "• <code>/объявить войну [цель]</code> — Начать войну\n"
         "• <code>/атака [кол-во]</code> — Ручная атака (КД 3 мин)\n"
         "• <code>/белый мир</code> — Предложить мир\n"
@@ -48,15 +50,15 @@ async def cmd_infosharyk(message: types.Message):
         "• <code>/аннексия</code> — Захват территории (при &lt;20% HP врага)\n"
         "• <code>/ультиматум [цель] [текст]</code> — Отправить требование с кнопками\n\n"
         "<b>🚀 Ракеты:</b>\n"
-        "• <code>/разработка [баллистика/ядерка]</code> — Вложить 10% золота\n"
+        "• <code>/разработка [баллистика/ядерка]</code> — Вложить 10% золота (КД 1ч для граждан)\n"
         "• <code>/пуск [баллистика/ядерка] [цель]</code> — Удар по столице\n\n"
         "<b>🏭 Экономика:</b>\n"
-        "• <code>/мобилизация</code> — Нанять 50-500 солдат (КД 5ч)\n"
-        "• <code>/работать</code> — Солдаты и золото (КД 4ч)\n"
-        "• <code>/устроится</code> — 150-300 золота в казну (КД 12ч, не лидер)\n"
+        "• <code>/мобилизация</code> — Нанять 50-500 солдат (КД 5ч, только лидер)\n"
+        "• <code>/подработка</code> — Солдаты и золото (КД 30 мин)\n"
+        "• <code>/устроится</code> — 150-300 золота в казну (КД 6ч, не лидер)\n"
         "• <code>/оборона [кол-во]</code> — Перевести солдат в оборону\n"
         "• <code>/тренировка [сила/защита/здоровье]</code> — Прокачка (КД 24ч)\n"
-        "• <code>/строй завод [тип]</code> — Постройка завода (КД 48ч)\n"
+        "• <code>/строй завод [тип]</code> — Постройка завода (КД 10 мин, только лидер)\n"
         "• <code>/столица [монеты]</code> — Укрепить столицу (500м = 18 HP, 10 мин)\n"
     )
     await message.answer(text)
@@ -67,13 +69,15 @@ async def cmd_boevik(message: types.Message):
         "⚔️ <b>Справочник Клан-Бота</b> ⚔️\n\n"
         "<b>🏰 Управление кланом:</b>\n"
         "• <code>/создать клан [название] [тег]</code> — Создать новый клан\n"
-        "• <code>/вступить [название или тег]</code> — Присоединиться к клану\n"
+        "• <code>/вступить [название или тег или номер]</code> — Присоединиться к клану\n"
         "• <code>/выйти</code> — Покинуть текущий клан\n"
         "• <code>/удалить клан подтверждаю</code> — Удалить свой клан (только лидер)\n"
         "• <code>/мой клан</code> — Показать статистику вашего клана\n"
         "• <code>/список кланов</code> — Показать кланы в этой группе\n\n"
         "<b>⚔️ Война и Дипломатия:</b>\n"
-        "• <code>/объявить войну [название или тег]</code> — Начать войну с другим кланом (только лидер)\n"
+        "• <code>/предложить альянс [цель]</code> — Предложить союз с другим кланом\n"
+        "• <code>/разорвать альянс [цель]</code> — Расторгнуть союз\n"
+        "• <code>/объявить войну [цель]</code> — Начать войну с другим кланом (только лидер)\n"
         "• <code>/атака [кол-во]</code> — Отправить армию в атаку. КД: 3 мин\n"
         "• <code>/белый мир</code> — Предложить или принять белый мир (без потерь, только лидер)\n"
         "• <code>/перемирие [время]</code> — Предложить перемирие (например: 1ч, 1д)\n"
@@ -81,14 +85,14 @@ async def cmd_boevik(message: types.Message):
         "• <code>/аннексия</code> — Захватить территорию врага (если HP врага &lt; 20%, только лидер)\n"
         "• <code>/ультиматум [цель] [текст]</code> — Отправить ультиматум клану\n\n"
         "<b>🚀 Ракетная программа:</b>\n"
-        "• <code>/разработка [баллистика/ядерка]</code> — Вложить 10% золота в разработку\n"
+        "• <code>/разработка [баллистика/ядерка]</code> — Вложить 10% золота в разработку (КД 1ч для граждан)\n"
         "• <code>/пуск [баллистика/ядерка] [цель]</code> — Запустить ракету (только лидер)\n\n"
         "<b>🏭 Экономика и Армия:</b>\n"
-        "• <code>/мобилизация</code> — Нанять солдат (от 50 до 500). КД: 5ч\n"
-        "• <code>/работать</code> — Произвести ресурсы для клана (армия и золото). КД: 4ч\n"
-        "• <code>/устроится</code> — Заработать 150-300 золота для клана (только участники). КД: 12ч\n"
+        "• <code>/мобилизация</code> — Нанять солдат (от 50 до 500). КД: 5ч (только лидер)\n"
+        "• <code>/подработка</code> — Произвести ресурсы для клана (армия и золото). КД: 30 мин\n"
+        "• <code>/устроится</code> — Заработать 150-300 золота для клана (только участники). КД: 6ч\n"
         "• <code>/тренировка [сила/защита/здоровье]</code> — Улучшить характеристики клана. КД: 24ч\n"
-        "• <code>/строй завод [оружейный/финансовый/оборонительный]</code> — Построить завод. КД: 48ч\n\n"
+        "• <code>/строй завод [оружейный/финансовый/оборонительный]</code> — Построить завод. КД: 10 мин (только лидер)\n\n"
         "<i>Бот работает в группах! Добавьте его в чат вашего клана.</i>"
     )
     await message.answer(text)
@@ -178,11 +182,24 @@ async def join_clan(message: types.Message):
     all_clans = get_db_ref('clans').get() or {}
     target_clan_id = None
     target_clan = None
-    for cid, cdata in all_clans.items():
-        if cdata.get('name', '').lower() == query or cdata.get('tag', '').lower() == query:
-            target_clan_id = cid
-            target_clan = cdata
-            break
+    
+    if query.isdigit():
+        idx = int(query) - 1
+        group_clans = []
+        for cid, cdata in all_clans.items():
+            if cdata.get('chat_id') == message.chat.id:
+                cdata['id'] = cid
+                group_clans.append(cdata)
+        group_clans.sort(key=lambda x: x.get('exp', 0), reverse=True)
+        if 0 <= idx < len(group_clans):
+            target_clan = group_clans[idx]
+            target_clan_id = target_clan['id']
+    else:
+        for cid, cdata in all_clans.items():
+            if cdata.get('name', '').lower() == query or cdata.get('tag', '').lower() == query:
+                target_clan_id = cid
+                target_clan = cdata
+                break
             
     if not target_clan:
         await message.answer("⚠️ Клан не найден.")
@@ -261,6 +278,7 @@ async def list_clans(message: types.Message):
     
     for cid, cdata in all_clans.items():
         if cdata.get('chat_id') == message.chat.id:
+            cdata['id'] = cid
             group_clans.append(cdata)
             
     if not group_clans:
@@ -270,9 +288,12 @@ async def list_clans(message: types.Message):
     # Sort by exp descending
     group_clans.sort(key=lambda x: x.get('exp', 0), reverse=True)
     
+    all_users = get_db_ref('users').get() or {}
+    
     lines = ["🏆 <b>Кланы этой группы:</b>\n"]
     for i, c in enumerate(group_clans, 1):
-        lines.append(f"{i}. <b>{html.escape(c.get('name', ''))}</b> [{html.escape(c.get('tag', ''))}] — 🌟 {c.get('exp', 0)} | 🏰 {c.get('capital_hp', 1000)} HP")
+        members = sum(1 for u in all_users.values() if u.get('clan_id') == c['id'])
+        lines.append(f"{i}. <b>{html.escape(c.get('name', ''))}</b> [{html.escape(c.get('tag', ''))}] — 👥 {members} | 💰 {c.get('gold', 0)} | 🌟 {c.get('exp', 0)}")
         
     await message.answer("\n".join(lines))
 
@@ -306,6 +327,13 @@ async def my_clan(message: types.Message):
     if clan.get('war_id'):
         war_status = "ВОЙНА ⚔️"
         
+    all_clans = get_db_ref('clans').get() or {}
+    allies = clan.get('allies', [])
+    allies_text = "Нет"
+    if allies:
+        ally_names = [html.escape(all_clans.get(aid, {}).get('name', 'Неизвестно')) for aid in allies if aid in all_clans]
+        allies_text = ", ".join(ally_names) if ally_names else "Нет"
+        
     text = (
         f"🛡 <b>Клан:</b> {html.escape(clan.get('name', ''))} [{html.escape(clan.get('tag', ''))}]\n"
         f"👑 <b>Лидер:</b> <a href='tg://user?id={clan.get('leader_id')}'>Лидер</a>\n"
@@ -314,6 +342,7 @@ async def my_clan(message: types.Message):
         f"🏰 <b>Столица:</b> {clan.get('capital_hp', 1000)} / {clan.get('max_capital_hp', 1000)} HP\n"
         f"💰 <b>Золото:</b> {clan.get('gold', 0)}\n"
         f"🌟 <b>Опыт:</b> {clan.get('exp', 0)}\n"
+        f"🤝 <b>Союзники:</b> {allies_text}\n"
         f"📊 <b>Статус:</b> {war_status}\n\n"
         f"<b>📈 Уровни:</b>\n"
         f"💪 Сила: {clan.get('power_level', 1)} | 🛡 Защита: {clan.get('defense_level', 1)} | ❤️ Здоровье: {clan.get('health_level', 1)}\n\n"
@@ -325,16 +354,16 @@ async def my_clan(message: types.Message):
     )
     
     builder = InlineKeyboardBuilder()
-    builder.button(text="⚔️ Мобилизация", callback_data=f"c_mob_{user_id}")
-    builder.button(text="🏭 Работать", callback_data=f"c_work_{user_id}")
+    builder.button(text="🧹 Подработка", callback_data=f"c_work_{user_id}")
+    builder.button(text="🚀 Ракеты", callback_data=f"c_rocket_menu_{user_id}")
     
     if clan.get('leader_id') != user_id:
         builder.button(text="🏢 Устроиться", callback_data=f"c_job_{user_id}")
         builder.button(text="🚪 Выйти", callback_data=f"c_leave_{user_id}")
     else:
+        builder.button(text="⚔️ Мобилизация", callback_data=f"c_mob_{user_id}")
         builder.button(text="💪 Тренировка", callback_data=f"c_train_menu_{user_id}")
         builder.button(text="🏭 Завод", callback_data=f"c_factory_menu_{user_id}")
-        builder.button(text="🚀 Ракеты", callback_data=f"c_rocket_menu_{user_id}")
         builder.button(text="💥 Распустить", callback_data=f"c_delete_menu_{user_id}")
         
     builder.adjust(2)
@@ -346,8 +375,14 @@ async def my_clan(message: types.Message):
 async def mobilize(message: types.Message):
     user_id = str(message.from_user.id)
     user = get_or_create_user(user_id, message.from_user.username or message.from_user.first_name)
-    if not user.get('clan_id'):
+    clan_id = user.get('clan_id')
+    if not clan_id:
         await message.answer("⚠️ Вы не состоите в клане.")
+        return
+        
+    clan = get_db_ref(f'clans/{clan_id}').get()
+    if clan.get('leader_id') != user_id:
+        await message.answer("⚠️ Только лидер может проводить мобилизацию!")
         return
         
     now = datetime.now()
@@ -366,7 +401,7 @@ async def mobilize(message: types.Message):
     })
     await message.answer(f"⚔️ Вы успешно мобилизовали {amount} солдат в армию клана!")
 
-@router.message(Command("работать", prefix="/"))
+@router.message(Command("подработка", prefix="/"))
 async def work(message: types.Message):
     user_id = str(message.from_user.id)
     user = get_or_create_user(user_id, message.from_user.username or message.from_user.first_name)
@@ -378,9 +413,9 @@ async def work(message: types.Message):
     now = datetime.now()
     if user.get('last_work'):
         last_work = datetime.fromisoformat(user.get('last_work'))
-        if now - last_work < timedelta(hours=4):
-            rem = timedelta(hours=4) - (now - last_work)
-            await message.answer(f"⏳ Вы устали! Следующая смена через: {rem.seconds//3600}ч {(rem.seconds//60)%60}м")
+        if now - last_work < timedelta(minutes=30):
+            rem = timedelta(minutes=30) - (now - last_work)
+            await message.answer(f"⏳ Вы устали! Следующая смена через: {rem.seconds//60}м")
             return
             
     army_gain = random.randint(10, 50)
@@ -417,8 +452,8 @@ async def get_job(message: types.Message):
     now = datetime.now()
     if user.get('last_job'):
         last_job = datetime.fromisoformat(user.get('last_job'))
-        if now - last_job < timedelta(hours=12):
-            rem = timedelta(hours=12) - (now - last_job)
+        if now - last_job < timedelta(hours=6):
+            rem = timedelta(hours=6) - (now - last_job)
             await message.answer(f"⏳ Вы уже работаете! Следующая зарплата через: {rem.seconds//3600}ч {(rem.seconds//60)%60}м")
             return
             
@@ -488,21 +523,25 @@ async def build_factory(message: types.Message):
         await message.answer("⚠️ Вы не состоите в клане.")
         return
         
+    clan_ref = get_db_ref(f'clans/{clan_id}')
+    clan = clan_ref.get()
+    
+    if clan.get('leader_id') != user_id:
+        await message.answer("⚠️ Только лидер может строить заводы!")
+        return
+        
     now = datetime.now()
     if user.get('last_factory'):
         last_fac = datetime.fromisoformat(user['last_factory'])
-        if now - last_fac < timedelta(hours=48):
-            rem = timedelta(hours=48) - (now - last_fac)
-            await message.answer(f"⏳ КД на постройку! Осталось: {rem.days}д {rem.seconds//3600}ч")
+        if now - last_fac < timedelta(minutes=10):
+            rem = timedelta(minutes=10) - (now - last_fac)
+            await message.answer(f"⏳ КД на постройку! Осталось: {rem.seconds//60}м")
             return
             
     field = ""
     if ftype == 'оружейный': field = 'factory_weapon'
     elif ftype == 'финансовый': field = 'factory_finance'
     elif ftype == 'оборонительный': field = 'factory_defense'
-    
-    clan_ref = get_db_ref(f'clans/{clan_id}')
-    clan = clan_ref.get()
     
     new_factory_count = clan.get(field, 0) + 1
     new_pop_limit = clan.get('population_limit', 15) + 1
@@ -558,6 +597,10 @@ async def declare_war(message: types.Message):
         
     if defender_id == attacker_id:
         await message.answer("⚠️ Нельзя объявить войну самому себе.")
+        return
+        
+    if defender_id in attacker.get('allies', []):
+        await message.answer("⚠️ Вы не можете объявить войну своему союзнику! Сначала разорвите альянс.")
         return
         
     if defender.get('war_id'):
@@ -950,6 +993,17 @@ async def develop(message: types.Message):
     clan_ref = get_db_ref(f'clans/{clan_id}')
     clan = clan_ref.get()
     
+    # Cooldown for non-leaders
+    if clan.get('leader_id') != user_id:
+        now = datetime.now()
+        if user.get('last_rocket_dev'):
+            last_dev = datetime.fromisoformat(user['last_rocket_dev'])
+            if now - last_dev < timedelta(hours=1):
+                rem = timedelta(hours=1) - (now - last_dev)
+                await message.answer(f"⏳ Граждане могут вкладывать в разработку раз в час! Осталось: {rem.seconds//60}м")
+                return
+        get_db_ref(f'users/{user_id}').update({'last_rocket_dev': now.isoformat()})
+    
     gold = clan.get('gold', 0)
     if gold < 10:
         await message.answer("⚠️ В казне слишком мало золота для разработки (нужно хотя бы 10).")
@@ -1117,6 +1171,53 @@ async def ult_callback(callback: types.CallbackQuery):
         except:
             pass
 
+@router.callback_query(F.data.startswith("ally_"))
+async def alliance_callbacks(callback: types.CallbackQuery):
+    parts = callback.data.split('_')
+    action = parts[1]
+    sender_clan_id = parts[2]
+    target_leader_id = parts[3]
+    user_id = str(callback.from_user.id)
+    
+    if user_id != target_leader_id:
+        await callback.answer("⚠️ Только лидер может принимать решения!", show_alert=True)
+        return
+        
+    user = get_or_create_user(user_id, callback.from_user.username or callback.from_user.first_name)
+    target_clan_id = user.get('clan_id')
+    if not target_clan_id:
+        await callback.answer("⚠️ Вы не состоите в клане.", show_alert=True)
+        return
+        
+    sender_clan = get_db_ref(f'clans/{sender_clan_id}').get()
+    target_clan = get_db_ref(f'clans/{target_clan_id}').get()
+    
+    if not sender_clan or not target_clan:
+        await callback.message.edit_text("⚠️ Один из кланов больше не существует.")
+        return
+        
+    if action == "acc":
+        s_allies = sender_clan.get('allies', [])
+        t_allies = target_clan.get('allies', [])
+        if target_clan_id not in s_allies: s_allies.append(target_clan_id)
+        if sender_clan_id not in t_allies: t_allies.append(sender_clan_id)
+        
+        get_db_ref(f'clans/{sender_clan_id}').update({'allies': s_allies})
+        get_db_ref(f'clans/{target_clan_id}').update({'allies': t_allies})
+        
+        await callback.message.edit_text(f"🤝 Альянс с кланом <b>{html.escape(sender_clan.get('name', ''))}</b> заключен!")
+        if sender_clan.get('chat_id'):
+            try:
+                await callback.bot.send_message(sender_clan['chat_id'], f"🤝 Клан <b>{html.escape(target_clan.get('name', ''))}</b> принял ваше предложение об альянсе!")
+            except: pass
+            
+    elif action == "dec":
+        await callback.message.edit_text(f"❌ Вы отклонили предложение альянса от <b>{html.escape(sender_clan.get('name', ''))}</b>.")
+        if sender_clan.get('chat_id'):
+            try:
+                await callback.bot.send_message(sender_clan['chat_id'], f"❌ Клан <b>{html.escape(target_clan.get('name', ''))}</b> отклонил ваше предложение об альянсе.")
+            except: pass
+
 @router.callback_query(F.data.startswith("c_"))
 async def clan_callbacks(callback: types.CallbackQuery):
     parts = callback.data.split('_')
@@ -1257,9 +1358,9 @@ async def clan_callbacks(callback: types.CallbackQuery):
         ftype = action.split("_")[1]
         if user.get('last_factory'):
             last_fac = datetime.fromisoformat(user['last_factory'])
-            if now - last_fac < timedelta(hours=48):
-                rem = timedelta(hours=48) - (now - last_fac)
-                await callback.answer(f"⏳ КД на постройку! Осталось: {rem.days}д {rem.seconds//3600}ч", show_alert=True)
+            if now - last_fac < timedelta(minutes=10):
+                rem = timedelta(minutes=10) - (now - last_fac)
+                await callback.answer(f"⏳ КД на постройку! Осталось: {rem.seconds//60}м", show_alert=True)
                 return
                 
         field = ""
@@ -1278,9 +1379,6 @@ async def clan_callbacks(callback: types.CallbackQuery):
         await callback.answer(f"🏭 Построен {ftype} завод! Лимит населения: {new_pop_limit}", show_alert=True)
         
     elif action == "rocket_menu":
-        if not is_leader:
-            await callback.answer("⚠️ Только лидер!", show_alert=True)
-            return
         builder = InlineKeyboardBuilder()
         builder.button(text="🚀 Разработка Баллистики", callback_data=f"c_dev_баллистика_{user_id}")
         builder.button(text="☢️ Разработка Ядерки", callback_data=f"c_dev_ядерка_{user_id}")
@@ -1290,8 +1388,14 @@ async def clan_callbacks(callback: types.CallbackQuery):
         
     elif action.startswith("dev_"):
         if not is_leader:
-            await callback.answer("⚠️ Только лидер!", show_alert=True)
-            return
+            if user.get('last_rocket_dev'):
+                last_dev = datetime.fromisoformat(user['last_rocket_dev'])
+                if now - last_dev < timedelta(hours=1):
+                    rem = timedelta(hours=1) - (now - last_dev)
+                    await callback.answer(f"⏳ КД на разработку! Осталось: {rem.seconds//60}м", show_alert=True)
+                    return
+            get_db_ref(f'users/{user_id}').update({'last_rocket_dev': now.isoformat()})
+            
         target = action.split("_")[1]
         gold = clan.get('gold', 0)
         if gold < 10:
@@ -1338,20 +1442,160 @@ async def clan_callbacks(callback: types.CallbackQuery):
         
     elif action == "back":
         builder = InlineKeyboardBuilder()
-        builder.button(text="⚔️ Мобилизация", callback_data=f"c_mob_{user_id}")
-        builder.button(text="🏭 Работать", callback_data=f"c_work_{user_id}")
+        builder.button(text="🧹 Подработка", callback_data=f"c_work_{user_id}")
+        builder.button(text="🚀 Ракеты", callback_data=f"c_rocket_menu_{user_id}")
         
         if not is_leader:
             builder.button(text="🏢 Устроиться", callback_data=f"c_job_{user_id}")
             builder.button(text="🚪 Выйти", callback_data=f"c_leave_{user_id}")
         else:
+            builder.button(text="⚔️ Мобилизация", callback_data=f"c_mob_{user_id}")
             builder.button(text="💪 Тренировка", callback_data=f"c_train_menu_{user_id}")
             builder.button(text="🏭 Завод", callback_data=f"c_factory_menu_{user_id}")
-            builder.button(text="🚀 Ракеты", callback_data=f"c_rocket_menu_{user_id}")
             builder.button(text="💥 Распустить", callback_data=f"c_delete_menu_{user_id}")
             
         builder.adjust(2)
         await callback.message.edit_reply_markup(reply_markup=builder.as_markup())
+
+@router.message(F.text.regexp(r'(?i)^/предложить альянс'))
+async def propose_alliance(message: types.Message):
+    args = message.text.split(maxsplit=2)
+    if len(args) < 3:
+        await message.answer("⚠️ Использование: <code>/предложить альянс [тег или номер или название]</code>")
+        return
+        
+    query = args[2].lower()
+    user_id = str(message.from_user.id)
+    user = get_or_create_user(user_id, message.from_user.username or message.from_user.first_name)
+    clan_id = user.get('clan_id')
+    if not clan_id:
+        await message.answer("⚠️ Вы не состоите в клане.")
+        return
+        
+    clan = get_db_ref(f'clans/{clan_id}').get()
+    if clan.get('leader_id') != user_id:
+        await message.answer("⚠️ Только лидер может предлагать альянсы.")
+        return
+        
+    all_clans = get_db_ref('clans').get() or {}
+    target_clan_id = None
+    target_clan = None
+    
+    if query.isdigit():
+        idx = int(query) - 1
+        group_clans = []
+        for cid, cdata in all_clans.items():
+            if cdata.get('chat_id') == message.chat.id:
+                cdata['id'] = cid
+                group_clans.append(cdata)
+        group_clans.sort(key=lambda x: x.get('exp', 0), reverse=True)
+        if 0 <= idx < len(group_clans):
+            target_clan = group_clans[idx]
+            target_clan_id = target_clan['id']
+    else:
+        for cid, cdata in all_clans.items():
+            if cdata.get('name', '').lower() == query or cdata.get('tag', '').lower() == query:
+                target_clan_id = cid
+                target_clan = cdata
+                break
+                
+    if not target_clan_id:
+        await message.answer("⚠️ Клан не найден.")
+        return
+        
+    if target_clan_id == clan_id:
+        await message.answer("⚠️ Вы не можете предложить альянс самому себе.")
+        return
+        
+    allies = clan.get('allies', [])
+    if target_clan_id in allies:
+        await message.answer("⚠️ Вы уже в альянсе с этим кланом.")
+        return
+        
+    target_chat_id = target_clan.get('chat_id')
+    if not target_chat_id:
+        await message.answer("⚠️ Клан не привязан к группе, невозможно отправить предложение.")
+        return
+        
+    builder = InlineKeyboardBuilder()
+    builder.button(text="✅ Принять", callback_data=f"ally_acc_{clan_id}_{target_clan['leader_id']}")
+    builder.button(text="❌ Отклонить", callback_data=f"ally_dec_{clan_id}_{target_clan['leader_id']}")
+    builder.adjust(2)
+    
+    try:
+        await message.bot.send_message(
+            target_chat_id,
+            f"🤝 <b>Предложение альянса!</b>\nКлан <b>{html.escape(clan.get('name', ''))}</b> предлагает вам альянс.",
+            reply_markup=builder.as_markup()
+        )
+        await message.answer("✅ Предложение отправлено!")
+    except Exception as e:
+        await message.answer("⚠️ Не удалось отправить предложение (возможно, бот не состоит в их группе).")
+
+@router.message(F.text.regexp(r'(?i)^/разорвать альянс'))
+async def break_alliance(message: types.Message):
+    args = message.text.split(maxsplit=2)
+    if len(args) < 3:
+        await message.answer("⚠️ Использование: <code>/разорвать альянс [тег или номер или название]</code>")
+        return
+        
+    query = args[2].lower()
+    user_id = str(message.from_user.id)
+    user = get_or_create_user(user_id, message.from_user.username or message.from_user.first_name)
+    clan_id = user.get('clan_id')
+    if not clan_id:
+        await message.answer("⚠️ Вы не состоите в клане.")
+        return
+        
+    clan = get_db_ref(f'clans/{clan_id}').get()
+    if clan.get('leader_id') != user_id:
+        await message.answer("⚠️ Только лидер может разрывать альянсы.")
+        return
+        
+    all_clans = get_db_ref('clans').get() or {}
+    target_clan_id = None
+    target_clan = None
+    
+    if query.isdigit():
+        idx = int(query) - 1
+        group_clans = []
+        for cid, cdata in all_clans.items():
+            if cdata.get('chat_id') == message.chat.id:
+                cdata['id'] = cid
+                group_clans.append(cdata)
+        group_clans.sort(key=lambda x: x.get('exp', 0), reverse=True)
+        if 0 <= idx < len(group_clans):
+            target_clan = group_clans[idx]
+            target_clan_id = target_clan['id']
+    else:
+        for cid, cdata in all_clans.items():
+            if cdata.get('name', '').lower() == query or cdata.get('tag', '').lower() == query:
+                target_clan_id = cid
+                target_clan = cdata
+                break
+                
+    if not target_clan_id:
+        await message.answer("⚠️ Клан не найден.")
+        return
+        
+    allies = clan.get('allies', [])
+    if target_clan_id not in allies:
+        await message.answer("⚠️ Вы не состоите в альянсе с этим кланом.")
+        return
+        
+    allies.remove(target_clan_id)
+    get_db_ref(f'clans/{clan_id}').update({'allies': allies})
+    
+    t_allies = target_clan.get('allies', [])
+    if clan_id in t_allies:
+        t_allies.remove(clan_id)
+        get_db_ref(f'clans/{target_clan_id}').update({'allies': t_allies})
+        
+    await message.answer(f"💔 Альянс с кланом <b>{html.escape(target_clan.get('name', ''))}</b> расторгнут.")
+    if target_clan.get('chat_id'):
+        try:
+            await message.bot.send_message(target_clan['chat_id'], f"💔 Клан <b>{html.escape(clan.get('name', ''))}</b> расторг с вами альянс.")
+        except: pass
 
 @router.message(F.text.regexp(r'(?i)^/rass'))
 async def cmd_rass(message: types.Message):
