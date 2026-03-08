@@ -28,6 +28,7 @@ class AdminStates(StatesGroup):
     waiting_for_ban = State()
     waiting_for_unban = State()
     waiting_for_reset_cd = State()
+    waiting_for_transfer_confirm = State()
     waiting_for_limit = State()
     waiting_for_factory = State()
     waiting_for_rocket = State()
@@ -735,7 +736,7 @@ async def kick_member(message: types.Message):
     if not is_bot_active(): return
     args = message.text.split()
     if len(args) < 2:
-        await message.answer("⚠️ Использование: <code>/кик [id или @username]</code>")
+        await message.answer("⚠️ Использование: <code>/кик [юз]</code>")
         return
     query = args[1]
     user_id = str(message.from_user.id)
@@ -759,31 +760,47 @@ async def kick_member(message: types.Message):
     name = target_user.get('username', target_id)
     await message.answer(f"✅ Игрок {format_user_link(target_id, name)} исключен.")
 
-@router.message(F.text.regexp(r'(?i)^/повысить'))
-async def promote_member(message: types.Message):
+@router.message(F.text.regexp(r'(?i)^/передать права'))
+async def transfer_leadership(message: types.Message, state: FSMContext):
     if not is_bot_active(): return
     args = message.text.split()
-    if len(args) < 2:
-        await message.answer("⚠️ Использование: <code>/повысить [id или @username]</code>")
+    if len(args) < 3:
+        await message.answer("⚠️ Использование: <code>/передать права [юз]</code>")
         return
-    query = args[1]
+    
+    query = args[2]
     user_id = str(message.from_user.id)
     user = get_or_create_user(user_id, message.from_user.username or message.from_user.first_name)
     clan_id = user.get('clan_id')
     if not clan_id: return
     clan = get_db_ref(f'clans/{clan_id}').get()
     if clan.get('leader_id') != user_id:
-        await message.answer("⚠️ Только лидер может повышать.")
+        await message.answer("⚠️ Только лидер может передать права.")
         return
         
     target_id, target_user = get_user_by_username_or_id(query)
-    
     if not target_user or target_user.get('clan_id') != clan_id:
-        await message.answer("⚠️ Игрок не в вашем клане.")
+        await message.answer("⚠️ Игрок не найден в вашем клане.")
         return
-    get_db_ref(f'clans/{clan_id}').update({'leader_id': target_id})
-    name = target_user.get('username', target_id)
-    await message.answer(f"✅ Лидерство передано игроку {format_user_link(target_id, name)}.")
+        
+    await state.update_data(target_id=target_id)
+    await state.set_state(AdminStates.waiting_for_transfer_confirm)
+    await message.answer(f"❓ Вы уверены, что хотите передать права лидерства игроку {html.escape(target_user.get('username', target_id))}? (Да/Нет)")
+
+@router.message(AdminStates.waiting_for_transfer_confirm)
+async def confirm_transfer(message: types.Message, state: FSMContext):
+    if message.text.lower() == 'да':
+        data = await state.get_data()
+        target_id = data.get('target_id')
+        user_id = str(message.from_user.id)
+        user = get_or_create_user(user_id, message.from_user.username or message.from_user.first_name)
+        clan_id = user.get('clan_id')
+        
+        get_db_ref(f'clans/{clan_id}').update({'leader_id': target_id})
+        await message.answer("✅ Права лидерства переданы.")
+    else:
+        await message.answer("❌ Передача отменена.")
+    await state.clear()
 
 
 @router.message(F.text.regexp(r'(?i)^/мир'))
@@ -989,7 +1006,7 @@ async def mobilization(message: types.Message, user_id=None, username=None):
             await message.answer(f"⏳ КД! Осталось: {rem.seconds//3600}ч {(rem.seconds//60)%60}м")
             return
             
-    recruits = random.randint(500, 2500)
+    recruits = random.randint(350, 2000)
     get_db_ref(f'users/{uid}').update({
         'army': user.get('army', 0) + recruits,
         'last_mobilization': now.isoformat()
