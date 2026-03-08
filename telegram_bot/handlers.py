@@ -37,7 +37,8 @@ async def cmd_boevik(message: types.Message):
         "• <code>/вступить [название или тег]</code> — Присоединиться к клану\n"
         "• <code>/выйти</code> — Покинуть текущий клан\n"
         "• <code>/удалить клан подтверждаю</code> — Удалить свой клан (только лидер)\n"
-        "• <code>/мой клан</code> — Показать статистику вашего клана\n\n"
+        "• <code>/мой клан</code> — Показать статистику вашего клана\n"
+        "• <code>/список кланов</code> — Показать кланы в этой группе\n\n"
         "<b>⚔️ Война и Дипломатия:</b>\n"
         "• <code>/объявить войну [название или тег]</code> — Начать войну с другим кланом (только лидер)\n"
         "• <code>/атака [кол-во]</code> — Отправить армию в атаку. КД: 3 мин\n"
@@ -52,6 +53,7 @@ async def cmd_boevik(message: types.Message):
         "<b>🏭 Экономика и Армия:</b>\n"
         "• <code>/мобилизация</code> — Нанять солдат (от 50 до 500). КД: 5ч\n"
         "• <code>/работать</code> — Произвести ресурсы для клана (армия и золото). КД: 4ч\n"
+        "• <code>/устроится</code> — Заработать 150-300 золота для клана (только участники). КД: 12ч\n"
         "• <code>/тренировка [сила/защита/здоровье]</code> — Улучшить характеристики клана. КД: 24ч\n"
         "• <code>/строй завод [оружейный/финансовый/оборонительный]</code> — Построить завод. КД: 48ч\n\n"
         "<i>Бот работает в группах! Добавьте его в чат вашего клана.</i>"
@@ -215,6 +217,32 @@ async def delete_clan(message: types.Message):
     get_db_ref(f'clans/{clan_id}').delete()
     await message.answer(f"💥 Клан <b>{html.escape(clan.get('name', ''))}</b> был распущен.")
 
+@router.message(F.text.regexp(r'(?i)^/список кланов'))
+async def list_clans(message: types.Message):
+    if message.chat.type == 'private':
+        await message.answer("⚠️ Эта команда работает только в группах.")
+        return
+        
+    all_clans = get_db_ref('clans').get() or {}
+    group_clans = []
+    
+    for cid, cdata in all_clans.items():
+        if cdata.get('chat_id') == message.chat.id:
+            group_clans.append(cdata)
+            
+    if not group_clans:
+        await message.answer("В этой группе пока нет кланов.")
+        return
+        
+    # Sort by exp descending
+    group_clans.sort(key=lambda x: x.get('exp', 0), reverse=True)
+    
+    lines = ["🏆 <b>Кланы этой группы:</b>\n"]
+    for i, c in enumerate(group_clans, 1):
+        lines.append(f"{i}. <b>{html.escape(c.get('name', ''))}</b> [{html.escape(c.get('tag', ''))}] — 🌟 {c.get('exp', 0)} | 🏰 {c.get('capital_hp', 1000)} HP")
+        
+    await message.answer("\n".join(lines))
+
 @router.message(F.text.regexp(r'(?i)^/мой клан'))
 async def my_clan(message: types.Message):
     user_id = str(message.from_user.id)
@@ -261,7 +289,22 @@ async def my_clan(message: types.Message):
         f"Баллистика: {clan.get('prog_ballistic', 0)} / 100000\n"
         f"Ядерка: {clan.get('prog_nuclear', 0)} / 1000000"
     )
-    await message.answer(text)
+    
+    builder = InlineKeyboardBuilder()
+    builder.button(text="⚔️ Мобилизация", callback_data=f"c_mob_{user_id}")
+    builder.button(text="🏭 Работать", callback_data=f"c_work_{user_id}")
+    
+    if clan.get('leader_id') != user_id:
+        builder.button(text="🏢 Устроиться", callback_data=f"c_job_{user_id}")
+        builder.button(text="🚪 Выйти", callback_data=f"c_leave_{user_id}")
+    else:
+        builder.button(text="💪 Тренировка", callback_data=f"c_train_menu_{user_id}")
+        builder.button(text="🏭 Завод", callback_data=f"c_factory_menu_{user_id}")
+        builder.button(text="🚀 Ракеты", callback_data=f"c_rocket_menu_{user_id}")
+        builder.button(text="💥 Распустить", callback_data=f"c_delete_menu_{user_id}")
+        
+    builder.adjust(2)
+    await message.answer(text, reply_markup=builder.as_markup())
 
 # --- Economy & Army ---
 
@@ -321,6 +364,40 @@ async def work(message: types.Message):
     clan_ref.update({'gold': new_gold})
     
     await message.answer(f"🏭 Вы поработали на благо клана!\nПроизведено солдат: {army_gain}\nЗаработано золота: {gold_gain}")
+
+@router.message(Command("устроится", "устроиться", prefix="/"))
+async def get_job(message: types.Message):
+    user_id = str(message.from_user.id)
+    user = get_or_create_user(user_id, message.from_user.username or message.from_user.first_name)
+    clan_id = user.get('clan_id')
+    if not clan_id:
+        await message.answer("⚠️ Вы не состоите в клане.")
+        return
+        
+    clan_ref = get_db_ref(f'clans/{clan_id}')
+    clan = clan_ref.get()
+    if clan.get('leader_id') == user_id:
+        await message.answer("⚠️ Лидер не может устроиться на работу!")
+        return
+        
+    now = datetime.now()
+    if user.get('last_job'):
+        last_job = datetime.fromisoformat(user.get('last_job'))
+        if now - last_job < timedelta(hours=12):
+            rem = timedelta(hours=12) - (now - last_job)
+            await message.answer(f"⏳ Вы уже работаете! Следующая зарплата через: {rem.seconds//3600}ч {(rem.seconds//60)%60}м")
+            return
+            
+    gold_gain = random.randint(150, 300)
+    
+    get_db_ref(f'users/{user_id}').update({
+        'last_job': now.isoformat()
+    })
+    
+    new_gold = clan.get('gold', 0) + gold_gain
+    clan_ref.update({'gold': new_gold})
+    
+    await message.answer(f"🏢 Вы устроились на работу и принесли в казну клана <b>{gold_gain}</b> золота!")
 
 @router.message(Command("тренировка", prefix="/"))
 async def train(message: types.Message):
@@ -985,6 +1062,242 @@ async def ult_callback(callback: types.CallbackQuery):
             await callback.bot.send_message(sender_clan.get('chat_id'), text)
         except:
             pass
+
+@router.callback_query(F.data.startswith("c_"))
+async def clan_callbacks(callback: types.CallbackQuery):
+    parts = callback.data.split('_')
+    target_user_id = parts[-1]
+    user_id = str(callback.from_user.id)
+    
+    if user_id != target_user_id:
+        await callback.answer("⚠️ Это меню не для вас!", show_alert=True)
+        return
+        
+    action = "_".join(parts[1:-1])
+    
+    user = get_or_create_user(user_id, callback.from_user.username or callback.from_user.first_name)
+    clan_id = user.get('clan_id')
+    
+    if not clan_id:
+        await callback.answer("⚠️ Вы не состоите в клане.", show_alert=True)
+        return
+        
+    clan_ref = get_db_ref(f'clans/{clan_id}')
+    clan = clan_ref.get()
+    if not clan:
+        await callback.answer("⚠️ Ваш клан не найден.", show_alert=True)
+        return
+        
+    is_leader = clan.get('leader_id') == user_id
+    now = datetime.now()
+    
+    if action == "mob":
+        if user.get('last_mobilization'):
+            last_mob = datetime.fromisoformat(user['last_mobilization'])
+            if now - last_mob < timedelta(hours=5):
+                rem = timedelta(hours=5) - (now - last_mob)
+                await callback.answer(f"⏳ КД на мобилизацию! Осталось: {rem.seconds//3600}ч {(rem.seconds//60)%60}м", show_alert=True)
+                return
+                
+        amount = random.randint(50, 500)
+        new_army = user.get('army', 0) + amount
+        get_db_ref(f'users/{user_id}').update({
+            'army': new_army,
+            'last_mobilization': now.isoformat()
+        })
+        await callback.answer(f"⚔️ Вы успешно мобилизовали {amount} солдат!", show_alert=True)
+        
+    elif action == "work":
+        if user.get('last_work'):
+            last_work = datetime.fromisoformat(user.get('last_work'))
+            if now - last_work < timedelta(hours=4):
+                rem = timedelta(hours=4) - (now - last_work)
+                await callback.answer(f"⏳ Вы устали! Следующая смена через: {rem.seconds//3600}ч {(rem.seconds//60)%60}м", show_alert=True)
+                return
+                
+        army_gain = random.randint(10, 50)
+        gold_gain = random.randint(10, 50)
+        
+        get_db_ref(f'users/{user_id}').update({
+            'army': user.get('army', 0) + army_gain,
+            'last_work': now.isoformat()
+        })
+        
+        clan_ref.update({'gold': clan.get('gold', 0) + gold_gain})
+        await callback.answer(f"🏭 Вы поработали!\nПроизведено солдат: {army_gain}\nЗаработано золота: {gold_gain}", show_alert=True)
+        
+    elif action == "job":
+        if is_leader:
+            await callback.answer("⚠️ Лидер не может устроиться на работу!", show_alert=True)
+            return
+            
+        if user.get('last_job'):
+            last_job = datetime.fromisoformat(user.get('last_job'))
+            if now - last_job < timedelta(hours=12):
+                rem = timedelta(hours=12) - (now - last_job)
+                await callback.answer(f"⏳ Вы уже работаете! Зарплата через: {rem.seconds//3600}ч {(rem.seconds//60)%60}м", show_alert=True)
+                return
+                
+        gold_gain = random.randint(150, 300)
+        get_db_ref(f'users/{user_id}').update({'last_job': now.isoformat()})
+        clan_ref.update({'gold': clan.get('gold', 0) + gold_gain})
+        await callback.answer(f"🏢 Вы принесли в казну клана {gold_gain} золота!", show_alert=True)
+        
+    elif action == "leave":
+        if is_leader:
+            await callback.answer("⚠️ Вы лидер клана! Вы не можете просто выйти.", show_alert=True)
+            return
+        get_db_ref(f'users/{user_id}').update({'clan_id': None, 'army': 0})
+        await callback.message.edit_text("🚪 Вы покинули клан.")
+        
+    elif action == "train_menu":
+        if not is_leader:
+            await callback.answer("⚠️ Только лидер!", show_alert=True)
+            return
+        builder = InlineKeyboardBuilder()
+        builder.button(text="💪 Сила", callback_data=f"c_train_сила_{user_id}")
+        builder.button(text="🛡 Защита", callback_data=f"c_train_защита_{user_id}")
+        builder.button(text="❤️ Здоровье", callback_data=f"c_train_здоровье_{user_id}")
+        builder.button(text="🔙 Назад", callback_data=f"c_back_{user_id}")
+        builder.adjust(1)
+        await callback.message.edit_reply_markup(reply_markup=builder.as_markup())
+        
+    elif action.startswith("train_"):
+        if not is_leader:
+            await callback.answer("⚠️ Только лидер!", show_alert=True)
+            return
+        stat = action.split("_")[1]
+        if user.get('last_train'):
+            last_train = datetime.fromisoformat(user['last_train'])
+            if now - last_train < timedelta(hours=24):
+                rem = timedelta(hours=24) - (now - last_train)
+                await callback.answer(f"⏳ КД на тренировку! Осталось: {rem.seconds//3600}ч {(rem.seconds//60)%60}м", show_alert=True)
+                return
+                
+        field = ""
+        if stat == 'сила': field = 'power_level'
+        elif stat == 'защита': field = 'defense_level'
+        elif stat == 'здоровье': field = 'health_level'
+        
+        new_level = clan.get(field, 1) + 1
+        clan_ref.update({field: new_level})
+        get_db_ref(f'users/{user_id}').update({'last_train': now.isoformat()})
+        await callback.answer(f"💪 Навык {stat} повышен до {new_level}!", show_alert=True)
+        
+    elif action == "factory_menu":
+        if not is_leader:
+            await callback.answer("⚠️ Только лидер!", show_alert=True)
+            return
+        builder = InlineKeyboardBuilder()
+        builder.button(text="🔫 Оружейный", callback_data=f"c_build_оружейный_{user_id}")
+        builder.button(text="🏦 Финансовый", callback_data=f"c_build_финансовый_{user_id}")
+        builder.button(text="🧱 Оборонительный", callback_data=f"c_build_оборонительный_{user_id}")
+        builder.button(text="🔙 Назад", callback_data=f"c_back_{user_id}")
+        builder.adjust(1)
+        await callback.message.edit_reply_markup(reply_markup=builder.as_markup())
+        
+    elif action.startswith("build_"):
+        if not is_leader:
+            await callback.answer("⚠️ Только лидер!", show_alert=True)
+            return
+        ftype = action.split("_")[1]
+        if user.get('last_factory'):
+            last_fac = datetime.fromisoformat(user['last_factory'])
+            if now - last_fac < timedelta(hours=48):
+                rem = timedelta(hours=48) - (now - last_fac)
+                await callback.answer(f"⏳ КД на постройку! Осталось: {rem.days}д {rem.seconds//3600}ч", show_alert=True)
+                return
+                
+        field = ""
+        if ftype == 'оружейный': field = 'factory_weapon'
+        elif ftype == 'финансовый': field = 'factory_finance'
+        elif ftype == 'оборонительный': field = 'factory_defense'
+        
+        new_factory_count = clan.get(field, 0) + 1
+        new_pop_limit = clan.get('population_limit', 15) + 1
+        
+        clan_ref.update({
+            field: new_factory_count,
+            'population_limit': new_pop_limit
+        })
+        get_db_ref(f'users/{user_id}').update({'last_factory': now.isoformat()})
+        await callback.answer(f"🏭 Построен {ftype} завод! Лимит населения: {new_pop_limit}", show_alert=True)
+        
+    elif action == "rocket_menu":
+        if not is_leader:
+            await callback.answer("⚠️ Только лидер!", show_alert=True)
+            return
+        builder = InlineKeyboardBuilder()
+        builder.button(text="🚀 Разработка Баллистики", callback_data=f"c_dev_баллистика_{user_id}")
+        builder.button(text="☢️ Разработка Ядерки", callback_data=f"c_dev_ядерка_{user_id}")
+        builder.button(text="🔙 Назад", callback_data=f"c_back_{user_id}")
+        builder.adjust(1)
+        await callback.message.edit_reply_markup(reply_markup=builder.as_markup())
+        
+    elif action.startswith("dev_"):
+        if not is_leader:
+            await callback.answer("⚠️ Только лидер!", show_alert=True)
+            return
+        target = action.split("_")[1]
+        gold = clan.get('gold', 0)
+        if gold < 10:
+            await callback.answer("⚠️ В казне слишком мало золота (нужно хотя бы 10).", show_alert=True)
+            return
+            
+        invest = int(gold * 0.1)
+        new_gold = gold - invest
+        
+        if target == 'баллистика':
+            prog = clan.get('prog_ballistic', 0) + invest
+            clan_ref.update({'gold': new_gold, 'prog_ballistic': prog})
+            await callback.answer(f"🚀 Вложено {invest} золота! Прогресс: {prog} / 100000", show_alert=True)
+        else:
+            prog = clan.get('prog_nuclear', 0) + invest
+            clan_ref.update({'gold': new_gold, 'prog_nuclear': prog})
+            await callback.answer(f"☢️ Вложено {invest} золота! Прогресс: {prog} / 1000000", show_alert=True)
+            
+    elif action == "delete_menu":
+        if not is_leader:
+            await callback.answer("⚠️ Только лидер!", show_alert=True)
+            return
+        builder = InlineKeyboardBuilder()
+        builder.button(text="💥 ПОДТВЕРДИТЬ УДАЛЕНИЕ", callback_data=f"c_delete_confirm_{user_id}")
+        builder.button(text="🔙 Отмена", callback_data=f"c_back_{user_id}")
+        builder.adjust(1)
+        await callback.message.edit_reply_markup(reply_markup=builder.as_markup())
+        
+    elif action == "delete_confirm":
+        if not is_leader:
+            await callback.answer("⚠️ Только лидер!", show_alert=True)
+            return
+        if clan.get('war_id'):
+            await callback.answer("⚠️ Вы не можете распустить клан во время войны!", show_alert=True)
+            return
+            
+        all_users = get_db_ref('users').get() or {}
+        for uid, udata in all_users.items():
+            if udata.get('clan_id') == clan_id:
+                get_db_ref(f'users/{uid}').update({'clan_id': None, 'army': 0})
+                
+        clan_ref.delete()
+        await callback.message.edit_text(f"💥 Клан <b>{html.escape(clan.get('name', ''))}</b> был распущен.")
+        
+    elif action == "back":
+        builder = InlineKeyboardBuilder()
+        builder.button(text="⚔️ Мобилизация", callback_data=f"c_mob_{user_id}")
+        builder.button(text="🏭 Работать", callback_data=f"c_work_{user_id}")
+        
+        if not is_leader:
+            builder.button(text="🏢 Устроиться", callback_data=f"c_job_{user_id}")
+            builder.button(text="🚪 Выйти", callback_data=f"c_leave_{user_id}")
+        else:
+            builder.button(text="💪 Тренировка", callback_data=f"c_train_menu_{user_id}")
+            builder.button(text="🏭 Завод", callback_data=f"c_factory_menu_{user_id}")
+            builder.button(text="🚀 Ракеты", callback_data=f"c_rocket_menu_{user_id}")
+            builder.button(text="💥 Распустить", callback_data=f"c_delete_menu_{user_id}")
+            
+        builder.adjust(2)
+        await callback.message.edit_reply_markup(reply_markup=builder.as_markup())
 
 @router.message()
 async def handle_all(message: types.Message):
