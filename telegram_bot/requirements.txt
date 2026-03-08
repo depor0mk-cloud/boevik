@@ -1,2 +1,3 @@
 aiogram
 firebase-admin
+aiohttp
