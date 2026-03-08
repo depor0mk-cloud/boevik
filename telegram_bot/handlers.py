@@ -138,6 +138,8 @@ def get_or_create_user(user_id, username):
             'username': username,
             'clan_id': None,
             'army': 0,
+            'strength': 1,
+            'gold': 0,
             'last_mobilization': None,
             'last_train': None,
             'last_factory': None
@@ -982,12 +984,12 @@ async def mobilization(message: types.Message, user_id=None, username=None):
     now = datetime.now()
     if user.get('last_mobilization'):
         last_mob = datetime.fromisoformat(user['last_mobilization'])
-        if now - last_mob < timedelta(hours=5):
-            rem = timedelta(hours=5) - (now - last_mob)
+        if now - last_mob < timedelta(hours=2, minutes=30):
+            rem = timedelta(hours=2, minutes=30) - (now - last_mob)
             await message.answer(f"⏳ КД! Осталось: {rem.seconds//3600}ч {(rem.seconds//60)%60}м")
             return
             
-    recruits = random.randint(10, 30)
+    recruits = random.randint(500, 2500)
     get_db_ref(f'users/{uid}').update({
         'army': user.get('army', 0) + recruits,
         'last_mobilization': now.isoformat()
@@ -1000,23 +1002,21 @@ async def train(message: types.Message, user_id=None, username=None):
     uid = str(user_id) if user_id else str(message.from_user.id)
     uname = username or (message.from_user.username or message.from_user.first_name)
     user = get_or_create_user(uid, uname)
-    clan_id = user.get('clan_id')
-    if not clan_id: return
     
     now = datetime.now()
     if user.get('last_train'):
         last_t = datetime.fromisoformat(user['last_train'])
-        if now - last_t < timedelta(hours=2):
-            rem = timedelta(hours=2) - (now - last_t)
+        if now - last_t < timedelta(hours=1):
+            rem = timedelta(hours=1) - (now - last_t)
             await message.answer(f"⏳ КД! Осталось: {rem.seconds//3600}ч {(rem.seconds//60)%60}м")
             return
             
-    recruits = random.randint(5, 15)
+    strength_increase = random.randint(1, 3)
     get_db_ref(f'users/{uid}').update({
-        'army': user.get('army', 0) + recruits,
+        'strength': user.get('strength', 1) + strength_increase,
         'last_train': now.isoformat()
     })
-    await message.answer(f"💪 Тренировка прошла успешно! Армия пополнена на {recruits} бойцов.")
+    await message.answer(f"💪 Тренировка прошла успешно! Сила армии увеличена на {strength_increase}.")
 
 @router.message(F.text.regexp(r'(?i)^/атака'))
 async def attack(message: types.Message):
@@ -1645,43 +1645,50 @@ async def global_market(message: types.Message):
     text += "<i>Для покупки используйте:</i> <code>/купить [id] [кол-во]</code>"
     await message.answer(text)
 
-@router.message(F.text.regexp(r'(?i)^/продать'))
-async def sell_item(message: types.Message):
+@router.message(F.text.regexp(r'(?i)^/продать производство'))
+async def sell_production(message: types.Message):
     if not is_bot_active(): return
     args = message.text.split()
     if len(args) < 4:
-        await message.answer("⚠️ Использование: <code>/продать [товар] [кол-во] [цена за 1 шт]</code>")
+        await message.answer("⚠️ Использование: <code>/продать производство [название] [кол-во]</code>")
         return
         
-    item = args[1].lower()
+    item = args[2].lower()
     try:
-        amount = int(args[2])
-        price = int(args[3])
+        amount = int(args[3])
     except:
-        await message.answer("⚠️ Количество и цена должны быть числами.")
+        await message.answer("⚠️ Количество должно быть числом.")
         return
         
-    if amount <= 0 or price <= 0: return
+    if amount <= 0: return
     
     user_id = str(message.from_user.id)
     user = get_or_create_user(user_id, message.from_user.username or message.from_user.first_name)
     clan_id = user.get('clan_id')
     if not clan_id: return
     
-    collect_production(clan_id)
-    clan = get_db_ref(f'clans/{clan_id}').get()
-    if clan.get('leader_id') != user_id:
-        await message.answer("⚠️ Только лидер может продавать ресурсы.")
+    clan_ref = get_db_ref(f'clans/{clan_id}')
+    clan = clan_ref.get()
+    
+    # Assuming production is stored in 'productions'
+    productions = clan.get('productions', {})
+    if productions.get(item, 0) < amount:
+        await message.answer(f"⚠️ Недостаточно производства <b>{html.escape(item)}</b> (у вас {productions.get(item, 0)}).")
         return
         
-    resources = clan.get('resources', {})
-    if resources.get(item, 0) < amount:
-        await message.answer(f"⚠️ Недостаточно ресурса <b>{html.escape(item)}</b> (у вас {resources.get(item, 0)}).")
-        return
-        
-    # Deduct resource
-    resources[item] -= amount
-    get_db_ref(f'clans/{clan_id}/resources').set(resources)
+    # Define prices here
+    prices = {'железо': 10, 'дерево': 5, 'еда': 2} # Example prices
+    price_per_unit = prices.get(item, 1)
+    total_gold = amount * price_per_unit
+    
+    # Deduct production and add gold
+    productions[item] -= amount
+    clan_ref.update({
+        'productions': productions,
+        'gold': clan.get('gold', 0) + total_gold
+    })
+    
+    await message.answer(f"✅ Продано {amount} шт. {html.escape(item)} за {total_gold} золота.")
     
     # Create lot
     lot_ref = get_db_ref('market').push()
