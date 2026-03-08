@@ -2,12 +2,18 @@ import asyncio
 import logging
 import os
 from aiohttp import web
-from aiogram import Bot, Dispatcher
+from aiogram import Bot, Dispatcher, BaseMiddleware
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 from config import BOT_TOKEN
 from firebase_db import init_firebase
-from handlers import router
+from handlers import router, current_user_ctx
+
+class UserContextMiddleware(BaseMiddleware):
+    async def __call__(self, handler, event, data):
+        if event.from_user:
+            current_user_ctx.set(event.from_user)
+        return await handler(event, data)
 
 logging.basicConfig(level=logging.INFO)
 
@@ -36,6 +42,8 @@ async def main():
     await bot.delete_webhook(drop_pending_updates=True)
     
     dp = Dispatcher()
+    dp.message.middleware(UserContextMiddleware())
+    dp.callback_query.middleware(UserContextMiddleware())
     dp.include_router(router)
     
     logging.info("Bot is running...")

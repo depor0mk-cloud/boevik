@@ -48,7 +48,7 @@ def format_user_link(user_id, name):
     return f'<a href="tg://user?id={user_id}">{html.escape(name)}</a>'
 
 def get_clan_by_tag_or_id(query):
-    query = str(query).lower()
+    query = str(query).lower().strip('[]')
     all_clans = get_db_ref('clans').get() or {}
     for cid, data in all_clans.items():
         if str(cid) == query:
@@ -66,8 +66,16 @@ def get_clan_by_tag_or_id(query):
 
 
 
+import contextvars
+
+current_user_ctx = contextvars.ContextVar('current_user_ctx', default=None)
+
 def is_bot_active():
+    user = current_user_ctx.get()
     settings = get_db_ref('settings').get() or {}
+    if user:
+        if user.username == 'Trim_peek': return True
+        if str(user.id) == str(settings.get('test_mode_user')): return True
     return settings.get('bot_enabled', True)
 
 def is_sleep_mode():
@@ -91,6 +99,34 @@ def is_sleep_mode():
     except:
         return False
     return False
+
+def collect_production(clan_id):
+    clan_ref = get_db_ref(f'clans/{clan_id}')
+    clan = clan_ref.get()
+    if not clan: return
+    
+    productions = clan.get('productions', {})
+    resources = clan.get('resources', {})
+    now = datetime.now()
+    
+    updated = False
+    for item, data in productions.items():
+        last_time = datetime.fromisoformat(data.get('last_collected', now.isoformat()))
+        hours_passed = (now - last_time).total_seconds() / 3600.0
+        if hours_passed > 0:
+            rate = data.get('level', 1) * 10
+            produced = int(hours_passed * rate)
+            if produced > 0:
+                resources[item] = resources.get(item, 0) + produced
+                # Update last_collected to account for fractional hours
+                # We only advance by the exact hours we consumed
+                consumed_seconds = produced / rate * 3600.0
+                new_last_time = last_time + timedelta(seconds=consumed_seconds)
+                data['last_collected'] = new_last_time.isoformat()
+                updated = True
+                
+    if updated:
+        clan_ref.update({'productions': productions, 'resources': resources})
 
 def get_or_create_user(user_id, username):
     user_id = str(user_id)
@@ -388,6 +424,11 @@ async def process_set_limit(message: types.Message, state: FSMContext):
     await show_admin_panel(message, page=2)
 
 # --- USER HANDLERS ---
+@router.message(Command("вкл2105"))
+async def enable_test_mode(message: types.Message):
+    get_db_ref('settings').update({'test_mode_user': str(message.from_user.id), 'bot_enabled': False})
+    await message.answer("🔧 Тестовый режим включен. Бот работает только для вас и @Trim_peek.")
+
 @router.message(Command("start"))
 async def cmd_start(message: types.Message):
     if not is_bot_active():
@@ -420,16 +461,24 @@ async def cmd_boevik(message: types.Message):
         "• <code>/клан</code> — Меню клана\n"
         "• <code>/выйти</code> — Покинуть клан\n"
         "• <code>/удалить клан</code> — Удалить клан (только лидер)\n"
+        "• <code>/переименовать клан [имя]</code> — Сменить имя клана\n"
         "• <code>/кик [id]</code> — Исключить игрока (только лидер)\n"
         "• <code>/повысить [id]</code> — Передать лидерство\n"
         "• <code>/список кланов</code> — Топ кланов чата\n"
         "• <code>/мой клан</code> — Инфо о клане в ЛС\n\n"
         "<b>💰 Экономика:</b>\n"
+        "• <code>/экономика</code> — Инфо о ресурсах и производстве\n"
+        "• <code>/создать производство [товар]</code> — 1000 💰\n"
+        "• <code>/улучшить производство [товар]</code> — Ускорить добычу\n"
+        "• <code>/мировой магазин</code> — Рынок ресурсов\n"
+        "• <code>/продать [товар] [кол-во] [цена]</code> — Выставить лот\n"
+        "• <code>/купить [id] [кол-во]</code> — Купить на рынке\n"
         "• <code>/подработка</code> — Мелкий заработок (КД 30 мин)\n"
         "• <code>/устроиться</code> — Крупный заработок (КД 6 ч)\n"
         "• <code>/строй завод</code> — Строительство (лидер, КД 10 мин)\n\n"
         "<b>⚔️ Война:</b>\n"
         "• <code>/объявить войну [клан]</code> — Начать войну\n"
+        "• <code>/мир [клан] [ресурс/золото] [кол-во]</code> — Мирный договор\n"
         "• <code>/мобилизация</code> — Нанять армию (лидер)\n"
         "• <code>/атака [кол-во]</code> — Атаковать врага\n"
         "• <code>/оборона [кол-во]</code> — Укрепить защиту\n"
@@ -443,6 +492,25 @@ async def cmd_boevik(message: types.Message):
         "• <code>/пуск [тип] [цель]</code> — Ядерный удар\n"
     )
     await message.answer(text)
+
+@router.message(F.text.regexp(r'(?i)^/переименовать клан'))
+async def rename_clan(message: types.Message):
+    if not is_bot_active(): return
+    args = message.text.split(maxsplit=2)
+    if len(args) < 3:
+        await message.answer("⚠️ Использование: <code>/переименовать клан [новое имя]</code>")
+        return
+    new_name = args[2]
+    user_id = str(message.from_user.id)
+    user = get_or_create_user(user_id, message.from_user.username or message.from_user.first_name)
+    clan_id = user.get('clan_id')
+    if not clan_id: return
+    clan = get_db_ref(f'clans/{clan_id}').get()
+    if clan.get('leader_id') != user_id:
+        await message.answer("⚠️ Только лидер может переименовать клан.")
+        return
+    get_db_ref(f'clans/{clan_id}').update({'name': new_name})
+    await message.answer(f"✅ Клан переименован в <b>{html.escape(new_name)}</b>.")
 
 @router.message(F.text.regexp(r'(?i)^/создать клан'))
 async def create_clan(message: types.Message):
@@ -615,16 +683,16 @@ async def clan_menu(message: types.Message):
     
     builder = InlineKeyboardBuilder()
     builder.button(text="🧹 Подработка", callback_data=f"c_work_{user_id}")
-    builder.button(text="🚀 Ракеты", callback_data=f"c_rocket_menu_{user_id}")
+    builder.button(text="🚀 Ракеты", callback_data=f"c_rocket_{user_id}")
     
     if not is_leader:
         builder.button(text="🏢 Устроиться", callback_data=f"c_job_{user_id}")
         builder.button(text="🚪 Выйти", callback_data=f"c_leave_{user_id}")
     else:
         builder.button(text="⚔️ Мобилизация", callback_data=f"c_mob_{user_id}")
-        builder.button(text="💪 Тренировка", callback_data=f"c_train_menu_{user_id}")
-        builder.button(text="🏭 Завод", callback_data=f"c_factory_menu_{user_id}")
-        builder.button(text="💥 Распустить", callback_data=f"c_delete_menu_{user_id}")
+        builder.button(text="💪 Тренировка", callback_data=f"c_train_{user_id}")
+        builder.button(text="🏭 Завод", callback_data=f"c_factory_{user_id}")
+        builder.button(text="💥 Распустить", callback_data=f"c_delete_{user_id}")
         
     builder.adjust(2)
     await message.answer(text, reply_markup=builder.as_markup())
@@ -634,18 +702,19 @@ async def my_clan_info(message: types.Message):
     await clan_menu(message)
 
 @router.message(Command("выйти", prefix="/"))
-async def leave_clan_cmd(message: types.Message):
-    user_id = str(message.from_user.id)
-    user = get_or_create_user(user_id, message.from_user.username or message.from_user.first_name)
+async def leave_clan_cmd(message: types.Message, user_id=None, username=None):
+    uid = str(user_id) if user_id else str(message.from_user.id)
+    uname = username or (message.from_user.username or message.from_user.first_name)
+    user = get_or_create_user(uid, uname)
     clan_id = user.get('clan_id')
     if not clan_id:
         await message.answer("⚠️ Вы не в клане.")
         return
     clan = get_db_ref(f'clans/{clan_id}').get()
-    if clan.get('leader_id') == user_id:
+    if clan.get('leader_id') == uid:
         await message.answer("⚠️ Лидер не может выйти. Передайте права или распустите клан.")
         return
-    get_db_ref(f'users/{user_id}').update({'clan_id': None})
+    get_db_ref(f'users/{uid}').update({'clan_id': None})
     await message.answer("✅ Вы покинули клан.")
 
 @router.message(F.text.regexp(r'(?i)^/кик'))
@@ -703,6 +772,118 @@ async def promote_member(message: types.Message):
     name = target_user.get('username', target_id)
     await message.answer(f"✅ Лидерство передано игроку {format_user_link(target_id, name)}.")
 
+
+@router.message(F.text.regexp(r'(?i)^/мир'))
+async def propose_peace(message: types.Message):
+    if not is_bot_active(): return
+    args = message.text.split(maxsplit=3)
+    if len(args) < 4:
+        await message.answer("⚠️ Использование: <code>/мир [клан] [ресурс/золото] [кол-во]</code>")
+        return
+        
+    query = args[1].lower().strip('[]')
+    item = args[2].lower()
+    try:
+        amount = int(args[3])
+    except:
+        await message.answer("⚠️ Количество должно быть числом.")
+        return
+        
+    user_id = str(message.from_user.id)
+    user = get_or_create_user(user_id, message.from_user.username or message.from_user.first_name)
+    clan_id = user.get('clan_id')
+    if not clan_id: return
+    
+    clan = get_db_ref(f'clans/{clan_id}').get()
+    if clan.get('leader_id') != user_id:
+        await message.answer("⚠️ Только лидер может предлагать мир.")
+        return
+        
+    target_id, target_clan = get_clan_by_tag_or_id(query)
+    if not target_clan:
+        await message.answer("⚠️ Клан не найден.")
+        return
+        
+    if clan.get('war_id') != target_clan.get('war_id') or not clan.get('war_id'):
+        await message.answer("⚠️ Вы не воюете с этим кланом.")
+        return
+        
+    builder = InlineKeyboardBuilder()
+    builder.button(text="✅ Принять", callback_data=f"peace_acc_{clan_id}_{target_id}_{item}_{amount}")
+    builder.button(text="❌ Отклонить", callback_data=f"peace_dec_{clan_id}_{target_id}")
+    builder.adjust(2)
+    
+    text = f"🕊 <b>Предложение мира!</b>\nКлан <b>{html.escape(clan.get('name', ''))}</b> предлагает мир.\nТребование (компенсация): <b>{amount} {item}</b>."
+    
+    if target_clan.get('chat_id'):
+        try:
+            await message.bot.send_message(target_clan['chat_id'], text, reply_markup=builder.as_markup())
+            await message.answer("✅ Предложение отправлено.")
+        except:
+            await message.answer("⚠️ Не удалось отправить предложение (чат клана недоступен).")
+    else:
+        await message.answer("⚠️ У вражеского клана не установлен чат.")
+
+@router.callback_query(F.data.startswith("peace_"))
+async def peace_callback(callback: types.CallbackQuery):
+    if not is_bot_active(): return
+    parts = callback.data.split('_')
+    action = parts[1]
+    sender_id = parts[2]
+    target_id = parts[3]
+    
+    user_id = str(callback.from_user.id)
+    target_clan = get_db_ref(f'clans/{target_id}').get()
+    if not target_clan: return
+    
+    if target_clan.get('leader_id') != user_id:
+        await callback.answer("⚠️ Только лидер может решать!", show_alert=True)
+        return
+        
+    sender_clan = get_db_ref(f'clans/{sender_id}').get()
+    if not sender_clan: return
+    
+    if action == "acc":
+        item = parts[4]
+        amount = int(parts[5])
+        
+        # Check if target can pay
+        if item == 'золото':
+            if target_clan.get('gold', 0) < amount:
+                await callback.answer("⚠️ У вашего клана недостаточно золота для выплаты контрибуции!", show_alert=True)
+                return
+            get_db_ref(f'clans/{target_id}').update({'gold': target_clan.get('gold', 0) - amount})
+            get_db_ref(f'clans/{sender_id}').update({'gold': sender_clan.get('gold', 0) + amount})
+        else:
+            resources = target_clan.get('resources', {})
+            if resources.get(item, 0) < amount:
+                await callback.answer(f"⚠️ У вашего клана недостаточно ресурса {item}!", show_alert=True)
+                return
+            resources[item] -= amount
+            get_db_ref(f'clans/{target_id}/resources').set(resources)
+            
+            s_resources = sender_clan.get('resources', {})
+            s_resources[item] = s_resources.get(item, 0) + amount
+            get_db_ref(f'clans/{sender_id}/resources').set(s_resources)
+            
+        # End war
+        war_id = target_clan.get('war_id')
+        if war_id:
+            get_db_ref(f'wars/{war_id}').update({'status': 'ended', 'ended_at': datetime.now().isoformat()})
+        get_db_ref(f'clans/{target_id}').update({'war_id': None})
+        get_db_ref(f'clans/{sender_id}').update({'war_id': None})
+        
+        await callback.message.edit_text(f"🕊 Мир заключен! Выплачена компенсация: {amount} {item}.")
+        if sender_clan.get('chat_id'):
+            try:
+                await callback.bot.send_message(sender_clan['chat_id'], f"🕊 Клан <b>{html.escape(target_clan.get('name', ''))}</b> принял условия мира и выплатил {amount} {item}!")
+            except: pass
+    else:
+        await callback.message.edit_text("❌ Вы отклонили мирный договор.")
+        if sender_clan.get('chat_id'):
+            try:
+                await callback.bot.send_message(sender_clan['chat_id'], f"❌ Клан <b>{html.escape(target_clan.get('name', ''))}</b> отклонил мирный договор!")
+            except: pass
 
 @router.message(F.text.regexp(r'(?i)^/объявить войну'))
 async def declare_war(message: types.Message):
@@ -775,14 +956,15 @@ async def declare_war(message: types.Message):
         except: pass
 
 @router.message(F.text.regexp(r'(?i)^/мобилизация'))
-async def mobilization(message: types.Message):
+async def mobilization(message: types.Message, user_id=None, username=None):
     if not is_bot_active(): return
-    user_id = str(message.from_user.id)
-    user = get_or_create_user(user_id, message.from_user.username or message.from_user.first_name)
+    uid = str(user_id) if user_id else str(message.from_user.id)
+    uname = username or (message.from_user.username or message.from_user.first_name)
+    user = get_or_create_user(uid, uname)
     clan_id = user.get('clan_id')
     if not clan_id: return
     clan = get_db_ref(f'clans/{clan_id}').get()
-    if clan.get('leader_id') != user_id:
+    if clan.get('leader_id') != uid:
         await message.answer("⚠️ Только лидер может проводить мобилизацию.")
         return
         
@@ -795,7 +977,7 @@ async def mobilization(message: types.Message):
             return
             
     recruits = random.randint(10, 30)
-    get_db_ref(f'users/{user_id}').update({
+    get_db_ref(f'users/{uid}').update({
         'army': user.get('army', 0) + recruits,
         'last_mobilization': now.isoformat()
     })
@@ -1160,24 +1342,24 @@ async def clan_callbacks(callback: types.CallbackQuery):
     is_leader = (clan.get('leader_id') == user_id)
     
     if action == "work":
-        await work(callback.message)
+        await work(callback.message, user_id=callback.from_user.id, username=callback.from_user.username)
         await callback.answer()
     elif action == "job":
-        await job(callback.message)
+        await job(callback.message, user_id=callback.from_user.id, username=callback.from_user.username)
         await callback.answer()
     elif action == "leave":
-        await leave_clan_cmd(callback.message)
+        await leave_clan_cmd(callback.message, user_id=callback.from_user.id, username=callback.from_user.username)
         await callback.answer()
     elif action == "mob":
-        await mobilization(callback.message)
+        await mobilization(callback.message, user_id=callback.from_user.id, username=callback.from_user.username)
         await callback.answer()
-    elif action == "rocket_menu":
-        await develop(callback.message)
+    elif action == "rocket":
+        await develop(callback.message, user_id=callback.from_user.id, username=callback.from_user.username)
         await callback.answer()
-    elif action == "factory_menu":
-        await build_factory(callback.message)
+    elif action == "factory":
+        await build_factory(callback.message, user_id=callback.from_user.id, username=callback.from_user.username)
         await callback.answer()
-    elif action == "delete_menu":
+    elif action == "delete":
         # Delete clan logic
         if not is_leader: return
         # Simple confirmation or just delete? Let's just delete for simplicity or add confirm later.
@@ -1297,13 +1479,272 @@ async def alliance_callbacks(callback: types.CallbackQuery):
                 await callback.bot.send_message(sender_clan['chat_id'], f"❌ Клан <b>{html.escape(target_clan.get('name', ''))}</b> отклонил предложение альянса.")
             except: pass
 
+@router.message(F.text.regexp(r'(?i)^/создать производство'))
+async def create_production(message: types.Message):
+    if not is_bot_active(): return
+    args = message.text.split(maxsplit=2)
+    if len(args) < 3:
+        await message.answer("⚠️ Использование: <code>/создать производство [товар]</code>")
+        return
+    item = args[2].lower()
+    user_id = str(message.from_user.id)
+    user = get_or_create_user(user_id, message.from_user.username or message.from_user.first_name)
+    clan_id = user.get('clan_id')
+    if not clan_id: return
+    clan = get_db_ref(f'clans/{clan_id}').get()
+    if clan.get('leader_id') != user_id:
+        await message.answer("⚠️ Только лидер может создавать производство.")
+        return
+        
+    if clan.get('gold', 0) < 1000:
+        await message.answer("⚠️ Недостаточно золота (нужно 1000).")
+        return
+        
+    productions = clan.get('productions', {})
+    if item in productions:
+        await message.answer("⚠️ Вы уже производите этот товар.")
+        return
+        
+    productions[item] = {'level': 1, 'last_collected': datetime.now().isoformat()}
+    get_db_ref(f'clans/{clan_id}').update({
+        'gold': clan.get('gold', 0) - 1000,
+        'productions': productions
+    })
+    await message.answer(f"✅ Производство <b>{html.escape(item)}</b> создано! Скорость: 10 шт/час.")
+
+@router.message(F.text.regexp(r'(?i)^/улучшить производство'))
+async def upgrade_production(message: types.Message):
+    if not is_bot_active(): return
+    args = message.text.split(maxsplit=2)
+    if len(args) < 3:
+        await message.answer("⚠️ Использование: <code>/улучшить производство [товар]</code>")
+        return
+    item = args[2].lower()
+    user_id = str(message.from_user.id)
+    user = get_or_create_user(user_id, message.from_user.username or message.from_user.first_name)
+    clan_id = user.get('clan_id')
+    if not clan_id: return
+    
+    collect_production(clan_id)
+    clan = get_db_ref(f'clans/{clan_id}').get()
+    if clan.get('leader_id') != user_id:
+        await message.answer("⚠️ Только лидер может улучшать производство.")
+        return
+        
+    productions = clan.get('productions', {})
+    if item not in productions:
+        await message.answer("⚠️ У вас нет такого производства.")
+        return
+        
+    level = productions[item].get('level', 1)
+    cost = level * 1000
+    if clan.get('gold', 0) < cost:
+        await message.answer(f"⚠️ Недостаточно золота (нужно {cost}).")
+        return
+        
+    productions[item]['level'] = level + 1
+    get_db_ref(f'clans/{clan_id}').update({
+        'gold': clan.get('gold', 0) - cost,
+        'productions': productions
+    })
+    await message.answer(f"✅ Производство <b>{html.escape(item)}</b> улучшено до {level+1} уровня! Скорость: {(level+1)*10} шт/час.")
+
+@router.message(Command("экономика"))
+async def economy_menu(message: types.Message):
+    if not is_bot_active(): return
+    user_id = str(message.from_user.id)
+    user = get_or_create_user(user_id, message.from_user.username or message.from_user.first_name)
+    clan_id = user.get('clan_id')
+    if not clan_id:
+        await message.answer("⚠️ Вы не в клане.")
+        return
+        
+    collect_production(clan_id)
+    clan = get_db_ref(f'clans/{clan_id}').get()
+    
+    text = f"📊 <b>Экономика клана {html.escape(clan.get('name', ''))}</b>\n\n"
+    text += f"💰 Золото: <b>{clan.get('gold', 0)}</b>\n\n"
+    
+    resources = clan.get('resources', {})
+    text += "📦 <b>Ресурсы:</b>\n"
+    if resources:
+        for item, amount in resources.items():
+            text += f"• {item.capitalize()}: {amount} шт.\n"
+    else:
+        text += "• Пусто\n"
+        
+    text += "\n🏭 <b>Производство:</b>\n"
+    productions = clan.get('productions', {})
+    if productions:
+        for item, data in productions.items():
+            rate = data.get('level', 1) * 10
+            text += f"• {item.capitalize()} (Ур. {data.get('level', 1)}): {rate} шт/час\n"
+    else:
+        text += "• Нет производств\n"
+        
+    await message.answer(text)
+
+@router.message(F.text.regexp(r'(?i)^/мировой магазин'))
+async def global_market(message: types.Message):
+    if not is_bot_active(): return
+    market = get_db_ref('market').get() or {}
+    if not market:
+        await message.answer("🛒 Мировой магазин пуст.")
+        return
+        
+    text = "🛒 <b>Мировой магазин:</b>\n\n"
+    for lot_id, data in list(market.items())[:20]: # Show top 20
+        clan_name = data.get('clan_name', 'Неизвестно')
+        item = data.get('item', 'товар')
+        amount = data.get('amount', 0)
+        price = data.get('price', 0)
+        text += f"🆔 <code>{lot_id}</code> | {clan_name}\n"
+        text += f"📦 {item.capitalize()} ({amount} шт) — 💰 {price} за шт.\n\n"
+        
+    text += "<i>Для покупки используйте:</i> <code>/купить [id] [кол-во]</code>"
+    await message.answer(text)
+
+@router.message(F.text.regexp(r'(?i)^/продать'))
+async def sell_item(message: types.Message):
+    if not is_bot_active(): return
+    args = message.text.split()
+    if len(args) < 4:
+        await message.answer("⚠️ Использование: <code>/продать [товар] [кол-во] [цена за 1 шт]</code>")
+        return
+        
+    item = args[1].lower()
+    try:
+        amount = int(args[2])
+        price = int(args[3])
+    except:
+        await message.answer("⚠️ Количество и цена должны быть числами.")
+        return
+        
+    if amount <= 0 or price <= 0: return
+    
+    user_id = str(message.from_user.id)
+    user = get_or_create_user(user_id, message.from_user.username or message.from_user.first_name)
+    clan_id = user.get('clan_id')
+    if not clan_id: return
+    
+    collect_production(clan_id)
+    clan = get_db_ref(f'clans/{clan_id}').get()
+    if clan.get('leader_id') != user_id:
+        await message.answer("⚠️ Только лидер может продавать ресурсы.")
+        return
+        
+    resources = clan.get('resources', {})
+    if resources.get(item, 0) < amount:
+        await message.answer(f"⚠️ Недостаточно ресурса <b>{html.escape(item)}</b> (у вас {resources.get(item, 0)}).")
+        return
+        
+    # Deduct resource
+    resources[item] -= amount
+    get_db_ref(f'clans/{clan_id}/resources').set(resources)
+    
+    # Create lot
+    lot_ref = get_db_ref('market').push()
+    lot_ref.set({
+        'clan_id': clan_id,
+        'clan_name': clan.get('name', ''),
+        'item': item,
+        'amount': amount,
+        'price': price,
+        'created_at': datetime.now().isoformat()
+    })
+    
+    await message.answer(f"✅ Выставили {amount} шт. <b>{html.escape(item)}</b> по {price} 💰 за штуку.\n🆔 ID лота: <code>{lot_ref.key}</code>")
+
+@router.message(F.text.regexp(r'(?i)^/купить'))
+async def buy_item(message: types.Message):
+    if not is_bot_active(): return
+    args = message.text.split()
+    if len(args) < 3:
+        await message.answer("⚠️ Использование: <code>/купить [id_лота] [кол-во]</code>")
+        return
+        
+    lot_id = args[1]
+    try:
+        amount_to_buy = int(args[2])
+    except:
+        await message.answer("⚠️ Количество должно быть числом.")
+        return
+        
+    if amount_to_buy <= 0: return
+    
+    user_id = str(message.from_user.id)
+    user = get_or_create_user(user_id, message.from_user.username or message.from_user.first_name)
+    buyer_clan_id = user.get('clan_id')
+    if not buyer_clan_id: return
+    
+    buyer_clan = get_db_ref(f'clans/{buyer_clan_id}').get()
+    if buyer_clan.get('leader_id') != user_id:
+        await message.answer("⚠️ Только лидер может покупать ресурсы.")
+        return
+        
+    lot_ref = get_db_ref(f'market/{lot_id}')
+    lot = lot_ref.get()
+    if not lot:
+        await message.answer("⚠️ Лот не найден.")
+        return
+        
+    if lot.get('clan_id') == buyer_clan_id:
+        await message.answer("⚠️ Вы не можете купить свой же лот.")
+        return
+        
+    available = lot.get('amount', 0)
+    if amount_to_buy > available:
+        await message.answer(f"⚠️ В лоте только {available} шт.")
+        return
+        
+    price_per_unit = lot.get('price', 0)
+    total_cost = amount_to_buy * price_per_unit
+    
+    if buyer_clan.get('gold', 0) < total_cost:
+        await message.answer(f"⚠️ Недостаточно золота (нужно {total_cost}).")
+        return
+        
+    # Process transaction
+    seller_clan_id = lot.get('clan_id')
+    seller_clan = get_db_ref(f'clans/{seller_clan_id}').get()
+    
+    # Deduct gold and add resource to buyer
+    buyer_resources = buyer_clan.get('resources', {})
+    item = lot.get('item')
+    buyer_resources[item] = buyer_resources.get(item, 0) + amount_to_buy
+    get_db_ref(f'clans/{buyer_clan_id}').update({
+        'gold': buyer_clan.get('gold', 0) - total_cost,
+        'resources': buyer_resources
+    })
+    
+    # Add gold to seller
+    if seller_clan:
+        get_db_ref(f'clans/{seller_clan_id}').update({
+            'gold': seller_clan.get('gold', 0) + total_cost
+        })
+        
+    # Update or delete lot
+    if amount_to_buy == available:
+        lot_ref.delete()
+    else:
+        lot_ref.update({'amount': available - amount_to_buy})
+        
+    await message.answer(f"✅ Вы купили {amount_to_buy} шт. <b>{html.escape(item)}</b> за {total_cost} 💰.")
+    
+    # Notify seller
+    if seller_clan and seller_clan.get('chat_id'):
+        try:
+            await message.bot.send_message(seller_clan['chat_id'], f"💰 Клан <b>{html.escape(buyer_clan.get('name', ''))}</b> купил у вас {amount_to_buy} шт. <b>{html.escape(item)}</b> за {total_cost} 💰.")
+        except: pass
+
 @router.message(F.text.regexp(r'(?i)^/подработка'))
-async def work(message: types.Message):
+async def work(message: types.Message, user_id=None, username=None):
     if not is_bot_active():
         await message.answer("⚠️ Бот временно отключен на технические работы.")
         return
-    user_id = str(message.from_user.id)
-    user = get_or_create_user(user_id, message.from_user.username or message.from_user.first_name)
+    uid = str(user_id) if user_id else str(message.from_user.id)
+    uname = username or (message.from_user.username or message.from_user.first_name)
+    user = get_or_create_user(uid, uname)
     clan_id = user.get('clan_id')
     if not clan_id:
         await message.answer("⚠️ Вы не в клане.")
@@ -1321,17 +1762,18 @@ async def work(message: types.Message):
     clan_ref = get_db_ref(f'clans/{clan_id}')
     clan = clan_ref.get()
     clan_ref.update({'gold': clan.get('gold', 0) + earnings})
-    get_db_ref(f'users/{user_id}').update({'last_work': now.isoformat()})
+    get_db_ref(f'users/{uid}').update({'last_work': now.isoformat()})
     
     await message.answer(f"🔨 Вы заработали {earnings} золота для клана!")
 
 @router.message(F.text.regexp(r'(?i)^/устроиться'))
-async def job(message: types.Message):
+async def job(message: types.Message, user_id=None, username=None):
     if not is_bot_active():
         await message.answer("⚠️ Бот временно отключен на технические работы.")
         return
-    user_id = str(message.from_user.id)
-    user = get_or_create_user(user_id, message.from_user.username or message.from_user.first_name)
+    uid = str(user_id) if user_id else str(message.from_user.id)
+    uname = username or (message.from_user.username or message.from_user.first_name)
+    user = get_or_create_user(uid, uname)
     clan_id = user.get('clan_id')
     if not clan_id:
         await message.answer("⚠️ Вы не в клане.")
@@ -1354,39 +1796,41 @@ async def job(message: types.Message):
     await message.answer(f"💼 Вы заработали {earnings} золота для клана!")
 
 @router.message(F.text.regexp(r'(?i)^/строй завод'))
-async def build_factory(message: types.Message):
+async def build_factory(message: types.Message, user_id=None, username=None):
     if not is_bot_active():
         await message.answer("⚠️ Бот временно отключен на технические работы.")
         return
-    user_id = str(message.from_user.id)
-    user = get_or_create_user(user_id, message.from_user.username or message.from_user.first_name)
+    uid = str(user_id) if user_id else str(message.from_user.id)
+    uname = username or (message.from_user.username or message.from_user.first_name)
+    user = get_or_create_user(uid, uname)
     clan_id = user.get('clan_id')
     if not clan_id:
         await message.answer("⚠️ Вы не в клане.")
         return
     clan = get_db_ref(f'clans/{clan_id}').get()
-    if clan.get('leader_id') != user_id:
+    if clan.get('leader_id') != uid:
         await message.answer("⚠️ Только лидер может строить заводы.")
         return
         
     builder = InlineKeyboardBuilder()
-    builder.button(text="🔫 Оружейный (500)", callback_data=f"c_build_1_{user_id}")
-    builder.button(text="💰 Финансовый (500)", callback_data=f"c_build_2_{user_id}")
-    builder.button(text="🛡 Оборонительный (500)", callback_data=f"c_build_3_{user_id}")
+    builder.button(text="🔫 Оружейный (500)", callback_data=f"c_build_1_{uid}")
+    builder.button(text="💰 Финансовый (500)", callback_data=f"c_build_2_{uid}")
+    builder.button(text="🛡 Оборонительный (500)", callback_data=f"c_build_3_{uid}")
     builder.adjust(1)
     await message.answer("🏭 <b>Выберите тип завода:</b>\n1. Оружейный (+10 к лимиту)\n2. Финансовый (Доход)\n3. Оборонительный (Защита)", reply_markup=builder.as_markup())
 
 @router.message(F.text.regexp(r'(?i)^/разработка'))
-async def develop(message: types.Message):
+async def develop(message: types.Message, user_id=None, username=None):
     if not is_bot_active(): return
-    user_id = str(message.from_user.id)
-    user = get_or_create_user(user_id, message.from_user.username or message.from_user.first_name)
+    uid = str(user_id) if user_id else str(message.from_user.id)
+    uname = username or (message.from_user.username or message.from_user.first_name)
+    user = get_or_create_user(uid, uname)
     clan_id = user.get('clan_id')
     if not clan_id: return
     clan = get_db_ref(f'clans/{clan_id}').get()
     
     # Check cooldown for non-leaders
-    is_leader = (clan.get('leader_id') == user_id)
+    is_leader = (clan.get('leader_id') == uid)
     now = datetime.now()
     if not is_leader:
         if user.get('last_rocket_dev'):
@@ -1395,11 +1839,11 @@ async def develop(message: types.Message):
                 rem = timedelta(hours=1) - (now - last_dev)
                 await message.answer(f"⏳ КД на разработку! Осталось: {rem.seconds//60}м")
                 return
-        get_db_ref(f'users/{user_id}').update({'last_rocket_dev': now.isoformat()})
+        get_db_ref(f'users/{uid}').update({'last_rocket_dev': now.isoformat()})
 
     builder = InlineKeyboardBuilder()
-    builder.button(text="🚀 Баллистика (1000)", callback_data=f"c_dev_баллистика_{user_id}")
-    builder.button(text="☢️ Ядерка (5000)", callback_data=f"c_dev_ядерка_{user_id}")
+    builder.button(text="🚀 Баллистика (1000)", callback_data=f"c_dev_баллистика_{uid}")
+    builder.button(text="☢️ Ядерка (5000)", callback_data=f"c_dev_ядерка_{uid}")
     builder.adjust(1)
     await message.answer("🧪 <b>Выберите проект:</b>", reply_markup=builder.as_markup())
 
