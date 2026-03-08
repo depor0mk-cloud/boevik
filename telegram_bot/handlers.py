@@ -13,6 +13,10 @@ from firebase_db import get_db_ref
 
 router = Router()
 
+# ... imports ...
+from aiogram.types import InlineKeyboardButton
+
+# ... AdminStates ...
 class AdminStates(StatesGroup):
     waiting_for_broadcast = State()
     waiting_for_sleep_time = State()
@@ -24,9 +28,43 @@ class AdminStates(StatesGroup):
     waiting_for_ban = State()
     waiting_for_unban = State()
     waiting_for_reset_cd = State()
+    waiting_for_limit = State()
     waiting_for_factory = State()
     waiting_for_rocket = State()
-    waiting_for_limit = State()
+
+# ... helper functions ...
+
+def get_user_by_username_or_id(query):
+    query = str(query).replace('@', '').lower()
+    all_users = get_db_ref('users').get() or {}
+    for uid, data in all_users.items():
+        if str(uid) == query:
+            return uid, data
+        if data.get('username', '').lower() == query:
+            return uid, data
+    return None, None
+
+def format_user_link(user_id, name):
+    return f'<a href="tg://user?id={user_id}">{html.escape(name)}</a>'
+
+def get_clan_by_tag_or_id(query):
+    query = str(query).lower()
+    all_clans = get_db_ref('clans').get() or {}
+    for cid, data in all_clans.items():
+        if str(cid) == query:
+            return cid, data
+        if data.get('tag', '').lower() == query or data.get('name', '').lower() == query:
+            return cid, data
+    return None, None
+
+# ... existing functions ...
+
+
+
+# Remove work, job, build_factory, develop, launch handlers by not including them or deleting them.
+# I will use edit_file to replace the blocks.
+
+
 
 def is_bot_active():
     settings = get_db_ref('settings').get() or {}
@@ -109,10 +147,10 @@ async def show_admin_panel(message, page=1):
         builder.button(text="🏭 +Завод", callback_data="admin_add_factory")
         builder.button(text="🚀 +Ракеты", callback_data="admin_add_rocket")
         builder.button(text="👥 Лимит", callback_data="admin_set_limit")
-        builder.adjust(3, 3)
+        builder.adjust(2, 2)
         builder.row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_page_1"))
 
-    text = "🔧 <b>Админ-панель</b>\nВыберите действие:"
+    text = f"🔧 <b>Админ-панель (Стр. {page}/2)</b>\nВыберите действие:"
     if isinstance(message, types.Message):
         await message.answer(text, reply_markup=builder.as_markup())
     elif isinstance(message, types.CallbackQuery):
@@ -201,15 +239,15 @@ async def process_broadcast(message: types.Message, state: FSMContext):
 @router.message(AdminStates.waiting_for_gold)
 async def process_add_gold(message: types.Message, state: FSMContext):
     try:
-        clan_id, amount = message.text.split()
+        query, amount = message.text.split()
         amount = int(amount)
-        clan_ref = get_db_ref(f'clans/{clan_id}')
-        if not clan_ref.get():
+        clan_id, clan_data = get_clan_by_tag_or_id(query)
+        if not clan_id:
             await message.answer("⚠️ Клан не найден.")
         else:
-            current = clan_ref.get().get('gold', 0)
-            clan_ref.update({'gold': current + amount})
-            await message.answer(f"✅ Выдано {amount} золота клану {clan_id}.")
+            current = clan_data.get('gold', 0)
+            get_db_ref(f'clans/{clan_id}').update({'gold': current + amount})
+            await message.answer(f"✅ Выдано {amount} золота клану {html.escape(clan_data.get('name', clan_id))}.")
     except:
         await message.answer("⚠️ Ошибка формата.")
     await state.clear()
@@ -218,15 +256,16 @@ async def process_add_gold(message: types.Message, state: FSMContext):
 @router.message(AdminStates.waiting_for_army)
 async def process_add_army(message: types.Message, state: FSMContext):
     try:
-        user_id, amount = message.text.split()
+        query, amount = message.text.split()
         amount = int(amount)
-        user_ref = get_db_ref(f'users/{user_id}')
-        if not user_ref.get():
+        uid, udata = get_user_by_username_or_id(query)
+        if not uid:
             await message.answer("⚠️ Пользователь не найден.")
         else:
-            current = user_ref.get().get('army', 0)
-            user_ref.update({'army': current + amount})
-            await message.answer(f"✅ Выдано {amount} армии пользователю {user_id}.")
+            current = udata.get('army', 0)
+            get_db_ref(f'users/{uid}').update({'army': current + amount})
+            name = udata.get('username', uid)
+            await message.answer(f"✅ Выдано {amount} армии пользователю {format_user_link(uid, name)}.")
     except:
         await message.answer("⚠️ Ошибка формата.")
     await state.clear()
@@ -234,17 +273,17 @@ async def process_add_army(message: types.Message, state: FSMContext):
 
 @router.message(AdminStates.waiting_for_delete_clan)
 async def process_del_clan(message: types.Message, state: FSMContext):
-    clan_id = message.text.strip()
-    clan_ref = get_db_ref(f'clans/{clan_id}')
-    if not clan_ref.get():
+    query = message.text.strip()
+    clan_id, clan_data = get_clan_by_tag_or_id(query)
+    if not clan_id:
         await message.answer("⚠️ Клан не найден.")
     else:
         all_users = get_db_ref('users').get() or {}
         for uid, udata in all_users.items():
             if udata.get('clan_id') == clan_id:
                 get_db_ref(f'users/{uid}').update({'clan_id': None})
-        clan_ref.delete()
-        await message.answer(f"✅ Клан {clan_id} удален.")
+        get_db_ref(f'clans/{clan_id}').delete()
+        await message.answer(f"✅ Клан {html.escape(clan_data.get('name', clan_id))} удален.")
     await state.clear()
     await show_admin_panel(message, page=1)
 
@@ -254,9 +293,9 @@ async def process_end_war(message: types.Message, state: FSMContext):
     war_ref = get_db_ref(f'wars/{query}')
     war = war_ref.get()
     if not war:
-        clan = get_db_ref(f'clans/{query}').get()
-        if clan and clan.get('war_id'):
-            war_ref = get_db_ref(f'wars/{clan["war_id"]}')
+        clan_id, clan_data = get_clan_by_tag_or_id(query)
+        if clan_id and clan_data.get('war_id'):
+            war_ref = get_db_ref(f'wars/{clan_data["war_id"]}')
             war = war_ref.get()
     if not war:
         await message.answer("⚠️ Война не найдена.")
@@ -273,13 +312,18 @@ async def process_end_war(message: types.Message, state: FSMContext):
 @router.message(AdminStates.waiting_for_leader)
 async def process_set_leader(message: types.Message, state: FSMContext):
     try:
-        clan_id, new_leader_id = message.text.split()
-        clan_ref = get_db_ref(f'clans/{clan_id}')
-        if not clan_ref.get():
+        clan_query, leader_query = message.text.split()
+        clan_id, clan_data = get_clan_by_tag_or_id(clan_query)
+        if not clan_id:
             await message.answer("⚠️ Клан не найден.")
         else:
-            clan_ref.update({'leader_id': new_leader_id})
-            await message.answer(f"✅ Лидер клана {clan_id} изменен на {new_leader_id}.")
+            uid, udata = get_user_by_username_or_id(leader_query)
+            if not uid:
+                await message.answer("⚠️ Пользователь не найден.")
+            else:
+                get_db_ref(f'clans/{clan_id}').update({'leader_id': uid})
+                name = udata.get('username', uid)
+                await message.answer(f"✅ Лидер клана {html.escape(clan_data.get('name', clan_id))} изменен на {format_user_link(uid, name)}.")
     except:
         await message.answer("⚠️ Ошибка формата.")
     await state.clear()
@@ -287,78 +331,57 @@ async def process_set_leader(message: types.Message, state: FSMContext):
 
 @router.message(AdminStates.waiting_for_ban)
 async def process_ban(message: types.Message, state: FSMContext):
-    user_id = message.text.strip()
-    get_db_ref(f'users/{user_id}').update({'banned': True})
-    await message.answer(f"✅ Пользователь {user_id} забанен.")
+    query = message.text.strip()
+    uid, udata = get_user_by_username_or_id(query)
+    if not uid:
+        await message.answer("⚠️ Пользователь не найден.")
+    else:
+        get_db_ref(f'users/{uid}').update({'banned': True})
+        name = udata.get('username', uid)
+        await message.answer(f"✅ Пользователь {format_user_link(uid, name)} забанен.")
     await state.clear()
     await show_admin_panel(message, page=2)
 
 @router.message(AdminStates.waiting_for_unban)
 async def process_unban(message: types.Message, state: FSMContext):
-    user_id = message.text.strip()
-    get_db_ref(f'users/{user_id}').update({'banned': False})
-    await message.answer(f"✅ Пользователь {user_id} разбанен.")
+    query = message.text.strip()
+    uid, udata = get_user_by_username_or_id(query)
+    if not uid:
+        await message.answer("⚠️ Пользователь не найден.")
+    else:
+        get_db_ref(f'users/{uid}').update({'banned': False})
+        name = udata.get('username', uid)
+        await message.answer(f"✅ Пользователь {format_user_link(uid, name)} разбанен.")
     await state.clear()
     await show_admin_panel(message, page=2)
 
 @router.message(AdminStates.waiting_for_reset_cd)
 async def process_reset_cd(message: types.Message, state: FSMContext):
-    user_id = message.text.strip()
-    get_db_ref(f'users/{user_id}').update({
-        'last_mobilization': None, 'last_work': None, 'last_job': None,
-        'last_train': None, 'last_factory': None, 'last_attack': None, 'last_rocket_dev': None
-    })
-    await message.answer(f"✅ КД пользователя {user_id} сброшены.")
-    await state.clear()
-    await show_admin_panel(message, page=2)
-
-@router.message(AdminStates.waiting_for_factory)
-async def process_add_factory(message: types.Message, state: FSMContext):
-    try:
-        clan_id, ftype, amount = message.text.split()
-        amount = int(amount)
-        clan_ref = get_db_ref(f'clans/{clan_id}')
-        clan = clan_ref.get()
-        if not clan:
-            await message.answer("⚠️ Клан не найден.")
-        else:
-            field = 'factory_weapon'
-            if ftype == '2': field = 'factory_finance'
-            elif ftype == '3': field = 'factory_defense'
-            current = clan.get(field, 0)
-            clan_ref.update({field: current + amount})
-            await message.answer(f"✅ Добавлено {amount} заводов (тип {ftype}) клану {clan_id}.")
-    except:
-        await message.answer("⚠️ Ошибка формата.")
-    await state.clear()
-    await show_admin_panel(message, page=2)
-
-@router.message(AdminStates.waiting_for_rocket)
-async def process_add_rocket(message: types.Message, state: FSMContext):
-    try:
-        clan_id, rtype, amount = message.text.split()
-        amount = int(amount)
-        clan_ref = get_db_ref(f'clans/{clan_id}')
-        clan = clan_ref.get()
-        if not clan:
-            await message.answer("⚠️ Клан не найден.")
-        else:
-            field = 'prog_ballistic' if rtype == '1' else 'prog_nuclear'
-            current = clan.get(field, 0)
-            clan_ref.update({field: current + amount})
-            await message.answer(f"✅ Добавлен прогресс {amount} (тип {rtype}) клану {clan_id}.")
-    except:
-        await message.answer("⚠️ Ошибка формата.")
+    query = message.text.strip()
+    uid, udata = get_user_by_username_or_id(query)
+    if not uid:
+        await message.answer("⚠️ Пользователь не найден.")
+    else:
+        get_db_ref(f'users/{uid}').update({
+            'last_mobilization': None, 'last_work': None, 'last_job': None,
+            'last_train': None, 'last_factory': None, 'last_attack': None, 'last_rocket_dev': None
+        })
+        name = udata.get('username', uid)
+        await message.answer(f"✅ КД пользователя {format_user_link(uid, name)} сброшены.")
     await state.clear()
     await show_admin_panel(message, page=2)
 
 @router.message(AdminStates.waiting_for_limit)
 async def process_set_limit(message: types.Message, state: FSMContext):
     try:
-        clan_id, limit = message.text.split()
+        query, limit = message.text.split()
         limit = int(limit)
-        get_db_ref(f'clans/{clan_id}').update({'population_limit': limit})
-        await message.answer(f"✅ Лимит клана {clan_id} установлен на {limit}.")
+        clan_id, clan_data = get_clan_by_tag_or_id(query)
+        if not clan_id:
+            await message.answer("⚠️ Клан не найден.")
+        else:
+            get_db_ref(f'clans/{clan_id}').update({'population_limit': limit})
+            await message.answer(f"✅ Лимит клана {html.escape(clan_data.get('name', clan_id))} установлен на {limit}.")
     except:
         await message.answer("⚠️ Ошибка формата.")
     await state.clear()
@@ -631,9 +654,9 @@ async def kick_member(message: types.Message):
     if not is_bot_active(): return
     args = message.text.split()
     if len(args) < 2:
-        await message.answer("⚠️ Использование: <code>/кик [id]</code>")
+        await message.answer("⚠️ Использование: <code>/кик [id или @username]</code>")
         return
-    target_id = args[1]
+    query = args[1]
     user_id = str(message.from_user.id)
     user = get_or_create_user(user_id, message.from_user.username or message.from_user.first_name)
     clan_id = user.get('clan_id')
@@ -642,7 +665,9 @@ async def kick_member(message: types.Message):
     if clan.get('leader_id') != user_id:
         await message.answer("⚠️ Только лидер может исключать.")
         return
-    target_user = get_db_ref(f'users/{target_id}').get()
+        
+    target_id, target_user = get_user_by_username_or_id(query)
+    
     if not target_user or target_user.get('clan_id') != clan_id:
         await message.answer("⚠️ Игрок не в вашем клане.")
         return
@@ -650,16 +675,17 @@ async def kick_member(message: types.Message):
         await message.answer("⚠️ Нельзя кикнуть себя.")
         return
     get_db_ref(f'users/{target_id}').update({'clan_id': None})
-    await message.answer(f"✅ Игрок {target_id} исключен.")
+    name = target_user.get('username', target_id)
+    await message.answer(f"✅ Игрок {format_user_link(target_id, name)} исключен.")
 
 @router.message(F.text.regexp(r'(?i)^/повысить'))
 async def promote_member(message: types.Message):
     if not is_bot_active(): return
     args = message.text.split()
     if len(args) < 2:
-        await message.answer("⚠️ Использование: <code>/повысить [id]</code>")
+        await message.answer("⚠️ Использование: <code>/повысить [id или @username]</code>")
         return
-    target_id = args[1]
+    query = args[1]
     user_id = str(message.from_user.id)
     user = get_or_create_user(user_id, message.from_user.username or message.from_user.first_name)
     clan_id = user.get('clan_id')
@@ -668,68 +694,17 @@ async def promote_member(message: types.Message):
     if clan.get('leader_id') != user_id:
         await message.answer("⚠️ Только лидер может повышать.")
         return
-    target_user = get_db_ref(f'users/{target_id}').get()
+        
+    target_id, target_user = get_user_by_username_or_id(query)
+    
     if not target_user or target_user.get('clan_id') != clan_id:
         await message.answer("⚠️ Игрок не в вашем клане.")
         return
     get_db_ref(f'clans/{clan_id}').update({'leader_id': target_id})
-    await message.answer(f"✅ Лидерство передано игроку {target_id}.")
+    name = target_user.get('username', target_id)
+    await message.answer(f"✅ Лидерство передано игроку {format_user_link(target_id, name)}.")
 
-@router.message(F.text.regexp(r'(?i)^/подработка'))
-async def work(message: types.Message):
-    if not is_bot_active():
-        await message.answer("⚠️ Бот временно отключен на технические работы.")
-        return
-    user_id = str(message.from_user.id)
-    user = get_or_create_user(user_id, message.from_user.username or message.from_user.first_name)
-    clan_id = user.get('clan_id')
-    if not clan_id:
-        await message.answer("⚠️ Вы не в клане.")
-        return
-    
-    now = datetime.now()
-    if user.get('last_work'):
-        last_work = datetime.fromisoformat(user['last_work'])
-        if now - last_work < timedelta(minutes=30):
-            rem = timedelta(minutes=30) - (now - last_work)
-            await message.answer(f"⏳ КД! Осталось: {rem.seconds//60}м {rem.seconds%60}с")
-            return
-            
-    earnings = random.randint(50, 150)
-    clan_ref = get_db_ref(f'clans/{clan_id}')
-    clan = clan_ref.get()
-    clan_ref.update({'gold': clan.get('gold', 0) + earnings})
-    get_db_ref(f'users/{user_id}').update({'last_work': now.isoformat()})
-    
-    await message.answer(f"🔨 Вы заработали {earnings} золота для клана!")
 
-@router.message(F.text.regexp(r'(?i)^/устроиться'))
-async def job(message: types.Message):
-    if not is_bot_active():
-        await message.answer("⚠️ Бот временно отключен на технические работы.")
-        return
-    user_id = str(message.from_user.id)
-    user = get_or_create_user(user_id, message.from_user.username or message.from_user.first_name)
-    clan_id = user.get('clan_id')
-    if not clan_id:
-        await message.answer("⚠️ Вы не в клане.")
-        return
-        
-    now = datetime.now()
-    if user.get('last_job'):
-        last_job = datetime.fromisoformat(user['last_job'])
-        if now - last_job < timedelta(hours=6):
-            rem = timedelta(hours=6) - (now - last_job)
-            await message.answer(f"⏳ КД! Осталось: {rem.seconds//3600}ч {(rem.seconds//60)%60}м")
-            return
-            
-    earnings = random.randint(300, 600)
-    clan_ref = get_db_ref(f'clans/{clan_id}')
-    clan = clan_ref.get()
-    clan_ref.update({'gold': clan.get('gold', 0) + earnings})
-    get_db_ref(f'users/{user_id}').update({'last_job': now.isoformat()})
-    
-    await message.answer(f"💼 Вы заработали {earnings} золота для клана!")
 
 @router.message(F.text.regexp(r'(?i)^/казна'))
 async def deposit(message: types.Message):
@@ -789,28 +764,7 @@ async def withdraw(message: types.Message):
     clan_ref.update({'gold': clan.get('gold', 0) - amount})
     await message.answer(f"💸 Вы сняли {amount} золота из казны.")
 
-@router.message(F.text.regexp(r'(?i)^/строй завод'))
-async def build_factory(message: types.Message):
-    if not is_bot_active():
-        await message.answer("⚠️ Бот временно отключен на технические работы.")
-        return
-    user_id = str(message.from_user.id)
-    user = get_or_create_user(user_id, message.from_user.username or message.from_user.first_name)
-    clan_id = user.get('clan_id')
-    if not clan_id:
-        await message.answer("⚠️ Вы не в клане.")
-        return
-    clan = get_db_ref(f'clans/{clan_id}').get()
-    if clan.get('leader_id') != user_id:
-        await message.answer("⚠️ Только лидер может строить заводы.")
-        return
-        
-    builder = InlineKeyboardBuilder()
-    builder.button(text="🔫 Оружейный (500)", callback_data=f"c_build_1_{user_id}")
-    builder.button(text="💰 Финансовый (500)", callback_data=f"c_build_2_{user_id}")
-    builder.button(text="🛡 Оборонительный (500)", callback_data=f"c_build_3_{user_id}")
-    builder.adjust(1)
-    await message.answer("🏭 <b>Выберите тип завода:</b>\n1. Оружейный (+10 к лимиту)\n2. Финансовый (Доход)\n3. Оборонительный (Защита)", reply_markup=builder.as_markup())
+
 
 @router.message(F.text.regexp(r'(?i)^/объявить войну'))
 async def declare_war(message: types.Message):
@@ -1105,99 +1059,7 @@ async def ultimatum(message: types.Message):
     else:
         await message.answer("⚠️ У клана нет чата.")
 
-@router.message(F.text.regexp(r'(?i)^/разработка'))
-async def develop(message: types.Message):
-    if not is_bot_active(): return
-    user_id = str(message.from_user.id)
-    user = get_or_create_user(user_id, message.from_user.username or message.from_user.first_name)
-    clan_id = user.get('clan_id')
-    if not clan_id: return
-    clan = get_db_ref(f'clans/{clan_id}').get()
-    
-    # Check cooldown for non-leaders
-    is_leader = (clan.get('leader_id') == user_id)
-    now = datetime.now()
-    if not is_leader:
-        if user.get('last_rocket_dev'):
-            last_dev = datetime.fromisoformat(user['last_rocket_dev'])
-            if now - last_dev < timedelta(hours=1):
-                rem = timedelta(hours=1) - (now - last_dev)
-                await message.answer(f"⏳ КД на разработку! Осталось: {rem.seconds//60}м")
-                return
-        get_db_ref(f'users/{user_id}').update({'last_rocket_dev': now.isoformat()})
 
-    builder = InlineKeyboardBuilder()
-    builder.button(text="🚀 Баллистика (1000)", callback_data=f"c_dev_баллистика_{user_id}")
-    builder.button(text="☢️ Ядерка (5000)", callback_data=f"c_dev_ядерка_{user_id}")
-    builder.adjust(1)
-    await message.answer("🧪 <b>Выберите проект:</b>", reply_markup=builder.as_markup())
-
-@router.message(F.text.regexp(r'(?i)^/пуск'))
-async def launch(message: types.Message):
-    if not is_bot_active():
-        await message.answer("⚠️ Бот временно отключен на технические работы.")
-        return
-    if is_sleep_mode():
-        await message.answer("🌙 <b>Режим сна!</b> Запуски запрещены.")
-        return
-    args = message.text.split(maxsplit=2)
-    if len(args) < 3:
-        await message.answer("⚠️ Использование: <code>/пуск [баллистика/ядерка] [цель]</code>")
-        return
-    rtype = args[1].lower()
-    query = args[2].lower()
-    
-    if rtype not in ['баллистика', 'ядерка']:
-        await message.answer("⚠️ Тип ракеты: баллистика или ядерка.")
-        return
-        
-    user_id = str(message.from_user.id)
-    user = get_or_create_user(user_id, message.from_user.username or message.from_user.first_name)
-    clan_id = user.get('clan_id')
-    if not clan_id: return
-    clan = get_db_ref(f'clans/{clan_id}').get()
-    if clan.get('leader_id') != user_id:
-        await message.answer("⚠️ Только лидер может запускать ракеты.")
-        return
-        
-    # Check progress
-    needed = 100 if rtype == 'баллистика' else 100
-    current = clan.get(f'prog_{"ballistic" if rtype == "баллистика" else "nuclear"}', 0)
-    if current < needed:
-        await message.answer(f"⚠️ Ракета не готова! Прогресс: {current}/{needed}")
-        return
-        
-    all_clans = get_db_ref('clans').get() or {}
-    target_id = None
-    target_clan = None
-    for cid, cdata in all_clans.items():
-        if cdata.get('name', '').lower() == query or cdata.get('tag', '').lower() == query:
-            target_id = cid
-            target_clan = cdata
-            break
-    if not target_id:
-        await message.answer("⚠️ Цель не найдена.")
-        return
-        
-    # Launch logic
-    damage = 50 if rtype == 'баллистика' else 100
-    # Reset progress
-    get_db_ref(f'clans/{clan_id}').update({f'prog_{"ballistic" if rtype == "баллистика" else "nuclear"}': 0})
-    
-    # Damage logic (reduce gold, army, factories?)
-    t_gold = target_clan.get('gold', 0)
-    t_army = target_clan.get('army', 0) # Wait, army is on users, not clan directly in this schema? 
-    # Actually army is on users. Can't easily wipe army without iterating users.
-    # Let's damage gold and factories.
-    
-    loss_gold = int(t_gold * (0.3 if rtype == 'баллистика' else 0.6))
-    get_db_ref(f'clans/{target_id}').update({'gold': max(0, t_gold - loss_gold)})
-    
-    await message.answer(f"🚀 <b>ПУСК!</b> Ракета {rtype} поразила <b>{html.escape(target_clan.get('name', ''))}</b>!\nУничтожено {loss_gold} золота.")
-    if target_clan.get('chat_id'):
-        try:
-            await message.bot.send_message(target_clan['chat_id'], f"💥 <b>ВНИМАНИЕ!</b>\nПо вам нанесен ракетный удар ({rtype}) от клана <b>{html.escape(clan.get('name', ''))}</b>!")
-        except: pass
 
 @router.message(F.text.regexp(r'(?i)^/предложить альянс'))
 async def propose_alliance(message: types.Message):
@@ -1496,6 +1358,216 @@ async def alliance_callbacks(callback: types.CallbackQuery):
             try:
                 await callback.bot.send_message(sender_clan['chat_id'], f"❌ Клан <b>{html.escape(target_clan.get('name', ''))}</b> отклонил предложение альянса.")
             except: pass
+
+@router.message(F.text.regexp(r'(?i)^/подработка'))
+async def work(message: types.Message):
+    if not is_bot_active():
+        await message.answer("⚠️ Бот временно отключен на технические работы.")
+        return
+    user_id = str(message.from_user.id)
+    user = get_or_create_user(user_id, message.from_user.username or message.from_user.first_name)
+    clan_id = user.get('clan_id')
+    if not clan_id:
+        await message.answer("⚠️ Вы не в клане.")
+        return
+    
+    now = datetime.now()
+    if user.get('last_work'):
+        last_work = datetime.fromisoformat(user['last_work'])
+        if now - last_work < timedelta(minutes=30):
+            rem = timedelta(minutes=30) - (now - last_work)
+            await message.answer(f"⏳ КД! Осталось: {rem.seconds//60}м {rem.seconds%60}с")
+            return
+            
+    earnings = random.randint(50, 150)
+    clan_ref = get_db_ref(f'clans/{clan_id}')
+    clan = clan_ref.get()
+    clan_ref.update({'gold': clan.get('gold', 0) + earnings})
+    get_db_ref(f'users/{user_id}').update({'last_work': now.isoformat()})
+    
+    await message.answer(f"🔨 Вы заработали {earnings} золота для клана!")
+
+@router.message(F.text.regexp(r'(?i)^/устроиться'))
+async def job(message: types.Message):
+    if not is_bot_active():
+        await message.answer("⚠️ Бот временно отключен на технические работы.")
+        return
+    user_id = str(message.from_user.id)
+    user = get_or_create_user(user_id, message.from_user.username or message.from_user.first_name)
+    clan_id = user.get('clan_id')
+    if not clan_id:
+        await message.answer("⚠️ Вы не в клане.")
+        return
+        
+    now = datetime.now()
+    if user.get('last_job'):
+        last_job = datetime.fromisoformat(user['last_job'])
+        if now - last_job < timedelta(hours=6):
+            rem = timedelta(hours=6) - (now - last_job)
+            await message.answer(f"⏳ КД! Осталось: {rem.seconds//3600}ч {(rem.seconds//60)%60}м")
+            return
+            
+    earnings = random.randint(300, 600)
+    clan_ref = get_db_ref(f'clans/{clan_id}')
+    clan = clan_ref.get()
+    clan_ref.update({'gold': clan.get('gold', 0) + earnings})
+    get_db_ref(f'users/{user_id}').update({'last_job': now.isoformat()})
+    
+    await message.answer(f"💼 Вы заработали {earnings} золота для клана!")
+
+@router.message(F.text.regexp(r'(?i)^/строй завод'))
+async def build_factory(message: types.Message):
+    if not is_bot_active():
+        await message.answer("⚠️ Бот временно отключен на технические работы.")
+        return
+    user_id = str(message.from_user.id)
+    user = get_or_create_user(user_id, message.from_user.username or message.from_user.first_name)
+    clan_id = user.get('clan_id')
+    if not clan_id:
+        await message.answer("⚠️ Вы не в клане.")
+        return
+    clan = get_db_ref(f'clans/{clan_id}').get()
+    if clan.get('leader_id') != user_id:
+        await message.answer("⚠️ Только лидер может строить заводы.")
+        return
+        
+    builder = InlineKeyboardBuilder()
+    builder.button(text="🔫 Оружейный (500)", callback_data=f"c_build_1_{user_id}")
+    builder.button(text="💰 Финансовый (500)", callback_data=f"c_build_2_{user_id}")
+    builder.button(text="🛡 Оборонительный (500)", callback_data=f"c_build_3_{user_id}")
+    builder.adjust(1)
+    await message.answer("🏭 <b>Выберите тип завода:</b>\n1. Оружейный (+10 к лимиту)\n2. Финансовый (Доход)\n3. Оборонительный (Защита)", reply_markup=builder.as_markup())
+
+@router.message(F.text.regexp(r'(?i)^/разработка'))
+async def develop(message: types.Message):
+    if not is_bot_active(): return
+    user_id = str(message.from_user.id)
+    user = get_or_create_user(user_id, message.from_user.username or message.from_user.first_name)
+    clan_id = user.get('clan_id')
+    if not clan_id: return
+    clan = get_db_ref(f'clans/{clan_id}').get()
+    
+    # Check cooldown for non-leaders
+    is_leader = (clan.get('leader_id') == user_id)
+    now = datetime.now()
+    if not is_leader:
+        if user.get('last_rocket_dev'):
+            last_dev = datetime.fromisoformat(user['last_rocket_dev'])
+            if now - last_dev < timedelta(hours=1):
+                rem = timedelta(hours=1) - (now - last_dev)
+                await message.answer(f"⏳ КД на разработку! Осталось: {rem.seconds//60}м")
+                return
+        get_db_ref(f'users/{user_id}').update({'last_rocket_dev': now.isoformat()})
+
+    builder = InlineKeyboardBuilder()
+    builder.button(text="🚀 Баллистика (1000)", callback_data=f"c_dev_баллистика_{user_id}")
+    builder.button(text="☢️ Ядерка (5000)", callback_data=f"c_dev_ядерка_{user_id}")
+    builder.adjust(1)
+    await message.answer("🧪 <b>Выберите проект:</b>", reply_markup=builder.as_markup())
+
+@router.message(F.text.regexp(r'(?i)^/пуск'))
+async def launch(message: types.Message):
+    if not is_bot_active():
+        await message.answer("⚠️ Бот временно отключен на технические работы.")
+        return
+    if is_sleep_mode():
+        await message.answer("🌙 <b>Режим сна!</b> Запуски запрещены.")
+        return
+    args = message.text.split(maxsplit=2)
+    if len(args) < 3:
+        await message.answer("⚠️ Использование: <code>/пуск [баллистика/ядерка] [цель]</code>")
+        return
+    rtype = args[1].lower()
+    query = args[2].lower()
+    
+    if rtype not in ['баллистика', 'ядерка']:
+        await message.answer("⚠️ Тип ракеты: баллистика или ядерка.")
+        return
+        
+    user_id = str(message.from_user.id)
+    user = get_or_create_user(user_id, message.from_user.username or message.from_user.first_name)
+    clan_id = user.get('clan_id')
+    if not clan_id: return
+    clan = get_db_ref(f'clans/{clan_id}').get()
+    if clan.get('leader_id') != user_id:
+        await message.answer("⚠️ Только лидер может запускать ракеты.")
+        return
+        
+    # Check progress
+    needed = 100 if rtype == 'баллистика' else 100
+    current = clan.get(f'prog_{"ballistic" if rtype == "баллистика" else "nuclear"}', 0)
+    if current < needed:
+        await message.answer(f"⚠️ Ракета не готова! Прогресс: {current}/{needed}")
+        return
+        
+    all_clans = get_db_ref('clans').get() or {}
+    target_id = None
+    target_clan = None
+    for cid, cdata in all_clans.items():
+        if cdata.get('name', '').lower() == query or cdata.get('tag', '').lower() == query:
+            target_id = cid
+            target_clan = cdata
+            break
+    if not target_id:
+        await message.answer("⚠️ Цель не найдена.")
+        return
+        
+    # Launch logic
+    damage = 50 if rtype == 'баллистика' else 100
+    # Reset progress
+    get_db_ref(f'clans/{clan_id}').update({f'prog_{"ballistic" if rtype == "баллистика" else "nuclear"}': 0})
+    
+    # Damage logic (reduce gold, army, factories?)
+    t_gold = target_clan.get('gold', 0)
+    
+    loss_gold = int(t_gold * (0.3 if rtype == 'баллистика' else 0.6))
+    get_db_ref(f'clans/{target_id}').update({'gold': max(0, t_gold - loss_gold)})
+    
+    await message.answer(f"🚀 <b>ПУСК!</b> Ракета {rtype} поразила <b>{html.escape(target_clan.get('name', ''))}</b>!\nУничтожено {loss_gold} золота.")
+    if target_clan.get('chat_id'):
+        try:
+            await message.bot.send_message(target_clan['chat_id'], f"💥 <b>ВНИМАНИЕ!</b>\nПо вам нанесен ракетный удар ({rtype}) от клана <b>{html.escape(clan.get('name', ''))}</b>!")
+        except: pass
+
+@router.message(AdminStates.waiting_for_factory)
+async def process_add_factory(message: types.Message, state: FSMContext):
+    try:
+        clan_id, ftype, amount = message.text.split()
+        amount = int(amount)
+        clan_ref = get_db_ref(f'clans/{clan_id}')
+        clan = clan_ref.get()
+        if not clan:
+            await message.answer("⚠️ Клан не найден.")
+        else:
+            field = 'factory_weapon'
+            if ftype == '2': field = 'factory_finance'
+            elif ftype == '3': field = 'factory_defense'
+            current = clan.get(field, 0)
+            clan_ref.update({field: current + amount})
+            await message.answer(f"✅ Добавлено {amount} заводов (тип {ftype}) клану {clan_id}.")
+    except:
+        await message.answer("⚠️ Ошибка формата.")
+    await state.clear()
+    await show_admin_panel(message, page=2)
+
+@router.message(AdminStates.waiting_for_rocket)
+async def process_add_rocket(message: types.Message, state: FSMContext):
+    try:
+        clan_id, rtype, amount = message.text.split()
+        amount = int(amount)
+        clan_ref = get_db_ref(f'clans/{clan_id}')
+        clan = clan_ref.get()
+        if not clan:
+            await message.answer("⚠️ Клан не найден.")
+        else:
+            field = 'prog_ballistic' if rtype == '1' else 'prog_nuclear'
+            current = clan.get(field, 0)
+            clan_ref.update({field: current + amount})
+            await message.answer(f"✅ Добавлен прогресс {amount} (тип {rtype}) клану {clan_id}.")
+    except:
+        await message.answer("⚠️ Ошибка формата.")
+    await state.clear()
+    await show_admin_panel(message, page=2)
 
 
 
