@@ -31,7 +31,6 @@ class AdminStates(StatesGroup):
     waiting_for_limit = State()
     waiting_for_factory = State()
     waiting_for_rocket = State()
-    waiting_for_promo = State()
 
 # ... helper functions ...
 
@@ -186,15 +185,14 @@ async def show_admin_panel(message, page=1):
         builder.button(text="🏭 +Завод", callback_data="admin_add_factory")
         builder.button(text="🚀 +Ракеты", callback_data="admin_add_rocket")
         builder.button(text="👥 Лимит", callback_data="admin_set_limit")
-        builder.button(text="🎁 Промокод", callback_data="admin_create_promo")
-        builder.adjust(2, 2, 2, 1)
+        builder.adjust(2, 2)
         builder.row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_page_1"))
 
     text = f"🔧 <b>Админ-панель (Стр. {page}/2)</b>\nВыберите действие:"
     if isinstance(message, types.Message):
         await message.answer(text, reply_markup=builder.as_markup())
     elif isinstance(message, types.CallbackQuery):
-        await message.message.edit_text(text, reply_markup=builder.as_markup())
+        await message.edit_text(text, reply_markup=builder.as_markup())
 
 @router.callback_query(F.data.startswith("admin_"))
 async def admin_callbacks(callback: types.CallbackQuery, state: FSMContext):
@@ -258,11 +256,8 @@ async def admin_callbacks(callback: types.CallbackQuery, state: FSMContext):
         await callback.message.edit_text("Введите ID клана, тип (1=балл, 2=яд) и прогресс (через пробел):")
         await state.set_state(AdminStates.waiting_for_rocket)
     elif action == "admin_set_limit":
-        await callback.message.edit_text("Введите ID/тег клана и новый лимит людей (через пробел):")
+        await callback.message.edit_text("Введите ID клана и новый лимит людей (через пробел):")
         await state.set_state(AdminStates.waiting_for_limit)
-    elif action == "admin_create_promo":
-        await callback.message.edit_text("Введите промокод и сумму золота (через пробел):")
-        await state.set_state(AdminStates.waiting_for_promo)
 
 @router.message(AdminStates.waiting_for_sleep_time)
 async def process_sleep_time(message: types.Message, state: FSMContext):
@@ -290,10 +285,13 @@ async def process_add_gold(message: types.Message, state: FSMContext):
             await message.answer("⚠️ Клан не найден.")
         else:
             current = clan_data.get('gold', 0)
-            get_db_ref(f'clans/{clan_id}').update({'gold': current + amount})
-            await message.answer(f"✅ Выдано {amount} золота клану {html.escape(clan_data.get('name', clan_id))}.")
-    except:
-        await message.answer("⚠️ Ошибка формата.")
+            new_gold = current + amount
+            print(f"DEBUG: clan_id={clan_id}, current={current}, amount={amount}, new_gold={new_gold}")
+            get_db_ref(f'clans/{clan_id}').update({'gold': new_gold})
+            await message.answer(f"✅ Выдано {amount} золота клану {html.escape(clan_data.get('name', clan_id))}. Новое значение: {new_gold}")
+    except Exception as e:
+        print(f"DEBUG: Error in process_add_gold: {e}")
+        await message.answer(f"⚠️ Ошибка формата или БД: {e}")
     await state.clear()
     await show_admin_panel(message, page=1)
 
@@ -428,18 +426,6 @@ async def process_set_limit(message: types.Message, state: FSMContext):
             await message.answer(f"✅ Лимит клана {html.escape(clan_data.get('name', clan_id))} установлен на {limit}.")
     except:
         await message.answer("⚠️ Ошибка формата.")
-    await state.clear()
-    await show_admin_panel(message, page=2)
-
-@router.message(AdminStates.waiting_for_promo)
-async def process_promo(message: types.Message, state: FSMContext):
-    try:
-        code, amount = message.text.split()
-        amount = int(amount)
-        get_db_ref(f'promocodes/{code}').set({'amount': amount})
-        await message.answer(f"✅ Промокод `{code}` на {amount} золота создан!", parse_mode="Markdown")
-    except:
-        await message.answer("⚠️ Ошибка формата. Введите: код сумма")
     await state.clear()
     await show_admin_panel(message, page=2)
 
@@ -2012,68 +1998,67 @@ async def promo(message: types.Message):
     
     args = message.text.split(maxsplit=1)
     if len(args) < 2:
-        await message.answer("⚠️ Введите промокод: /промокод [код]")
+        await message.answer("⚠️ Введите промокод: /промокод имя2105")
         return
         
     code = args[1]
-    uid = str(message.from_user.id)
-    
-    if code == "имя2105":
-        promo_ref = get_db_ref(f'promocodes/имя2105')
-        promo_data = promo_ref.get() or {}
-        used_by = promo_data.get('used_by', [])
-        if uid in used_by:
-            await message.answer("⚠️ Вы уже использовали этот промокод.")
-            return
-        used_by.append(uid)
-        promo_ref.update({'used_by': used_by})
-        user_ref = get_db_ref(f'users/{uid}')
-        user = user_ref.get() or {}
-        user_ref.update({'gold': user.get('gold', 0) + 1000})
-        await message.answer("✅ Секретный промокод активирован! Вам начислено 1000 монет.")
-        return
-
-    promo_ref = get_db_ref(f'promocodes/{code}')
-    promo_data = promo_ref.get()
-    
-    if not promo_data or 'amount' not in promo_data:
+    if code != "имя2105":
         await message.answer("⚠️ Неверный промокод.")
         return
-        
-    used_by = promo_data.get('used_by', [])
-    if uid in used_by:
-        await message.answer("⚠️ Вы уже использовали этот промокод.")
+    
+    uid = str(message.from_user.id)
+    promo_ref = get_db_ref(f'promocodes/{code}')
+    used_by = promo_ref.get()
+    if used_by:
+        await message.answer("⚠️ Промокод уже использован.")
         return
-        
-    amount = promo_data['amount']
-    used_by.append(uid)
-    promo_ref.update({'used_by': used_by})
     
     user_ref = get_db_ref(f'users/{uid}')
     user = user_ref.get() or {}
-    user_ref.update({'gold': user.get('gold', 0) + amount})
-    await message.answer(f"✅ Промокод активирован! Вам начислено {amount} монет.")
+    user_ref.update({'gold': user.get('gold', 0) + 1000})
+    promo_ref.set({'used_by': uid})
+    await message.answer("✅ Промокод активирован! Вам начислено 1000 монет.")
+
+@router.message(Command("работа"))
+async def work1(message: types.Message):
+    if not is_bot_active(): return
+    uid = str(message.from_user.id)
+    user = get_or_create_user(uid, message.from_user.username or message.from_user.first_name)
+    earnings = random.randint(100, 200)
+    new_gold = user.get('gold', 0) + earnings
+    print(f"DEBUG: uid={uid}, current={user.get('gold', 0)}, earnings={earnings}, new_gold={new_gold}")
+    get_db_ref(f'users/{uid}').update({'gold': new_gold})
+    await message.answer(f"🔨 Вы заработали {earnings} монет на основной работе! Новое значение: {new_gold}")
 
 @router.message(Command("работа2"))
 async def work2(message: types.Message):
     if not is_bot_active(): return
     uid = str(message.from_user.id)
     user = get_or_create_user(uid, message.from_user.username or message.from_user.first_name)
-    
-    now = datetime.now()
-    if user.get('last_work2'):
-        last_t = datetime.fromisoformat(user['last_work2'])
-        if now - last_t < timedelta(hours=17):
-            rem = timedelta(hours=17) - (now - last_t)
-            await message.answer(f"⏳ КД! Осталось: {rem.seconds//3600}ч {(rem.seconds//60)%60}м")
-            return
-            
-    earnings = random.randint(210, 410)
-    get_db_ref(f'users/{uid}').update({
-        'gold': user.get('gold', 0) + earnings,
-        'last_work2': now.isoformat()
-    })
-    await message.answer(f"🔨 Вы заработали {earnings} монет!")
+    earnings = random.randint(150, 250)
+    get_db_ref(f'users/{uid}').update({'gold': user.get('gold', 0) + earnings})
+    await message.answer(f"🔨 Вы заработали {earnings} монет на второй работе!")
+
+@router.message(Command("подработка"))
+async def part_time_job(message: types.Message):
+    if not is_bot_active(): return
+    uid = str(message.from_user.id)
+    user = get_or_create_user(uid, message.from_user.username or message.from_user.first_name)
+    earnings = random.randint(50, 100)
+    get_db_ref(f'users/{uid}').update({'gold': user.get('gold', 0) + earnings})
+    await message.answer(f"💼 Вы заработали {earnings} монет на подработке!")
+
+@router.message(Command("кланы"))
+async def list_clans(message: types.Message):
+    if not is_bot_active(): return
+    all_clans = get_db_ref('clans').get() or {}
+    if not all_clans:
+        await message.answer("🛡 Кланов пока нет.")
+        return
+    text = "🛡 <b>Список кланов:</b>\n\n"
+    for cid, c in all_clans.items():
+        text += f"• {html.escape(c.get('name', ''))} [{html.escape(c.get('tag', ''))}] — 💰 {c.get('gold', 0)}\n"
+    await message.answer(text)
 
 
 
