@@ -58,7 +58,7 @@ async def cmd_start(message: types.Message):
 
 # --- Clan Management ---
 
-@router.message(F.text.lower().startswith("!создать клан"))
+@router.message(F.text.regexp(r'(?i)^[!/]создать клан'))
 async def create_clan(message: types.Message):
     args = message.text.split()
     # Expecting: !создать клан Name Tag (at least 4 parts)
@@ -113,7 +113,7 @@ async def create_clan(message: types.Message):
     get_db_ref(f'users/{user_id}').update({'clan_id': clan_id})
     await message.answer(f"✅ Клан <b>{html.escape(name)}</b> [{html.escape(tag)}] успешно создан!\nВы стали лидером.")
 
-@router.message(Command("вступить", prefix="!"))
+@router.message(Command("вступить", prefix="!/"))
 async def join_clan(message: types.Message):
     args = message.text.split(maxsplit=1)
     if len(args) < 2:
@@ -151,7 +151,7 @@ async def join_clan(message: types.Message):
     get_db_ref(f'users/{user_id}').update({'clan_id': target_clan_id})
     await message.answer(f"✅ Вы успешно вступили в клан <b>{html.escape(target_clan['name'])}</b>!")
 
-@router.message(Command("выйти", prefix="!"))
+@router.message(Command("выйти", prefix="!/"))
 async def leave_clan(message: types.Message):
     user_id = str(message.from_user.id)
     user = get_or_create_user(user_id, message.from_user.username or message.from_user.first_name)
@@ -169,7 +169,7 @@ async def leave_clan(message: types.Message):
     get_db_ref(f'users/{user_id}').update({'clan_id': None, 'army': 0})
     await message.answer("🚪 Вы покинули клан.")
 
-@router.message(F.text.lower() == "!мой клан")
+@router.message(F.text.regexp(r'(?i)^[!/]мой клан'))
 async def my_clan(message: types.Message):
     user_id = str(message.from_user.id)
     user = get_or_create_user(user_id, message.from_user.username or message.from_user.first_name)
@@ -216,7 +216,7 @@ async def my_clan(message: types.Message):
 
 # --- Economy & Army ---
 
-@router.message(Command("мобилизация", prefix="!"))
+@router.message(Command("мобилизация", prefix="!/"))
 async def mobilize(message: types.Message):
     args = message.text.split()
     if len(args) < 2 or not args[1].isdigit():
@@ -248,7 +248,7 @@ async def mobilize(message: types.Message):
     })
     await message.answer(f"⚔️ Вы успешно мобилизовали {amount} солдат в армию клана!")
 
-@router.message(Command("тренировка", prefix="!"))
+@router.message(Command("тренировка", prefix="!/"))
 async def train(message: types.Message):
     args = message.text.split()
     valid_stats = ['сила', 'защита', 'здоровье']
@@ -286,7 +286,7 @@ async def train(message: types.Message):
     
     await message.answer(f"💪 Вы успешно потренировали клан! Навык <b>{stat}</b> повышен до {new_level}.")
 
-@router.message(F.text.lower().startswith("!строй завод"))
+@router.message(F.text.regexp(r'(?i)^[!/]строй завод'))
 async def build_factory(message: types.Message):
     args = message.text.split()
     # Expecting: !строй завод type
@@ -332,7 +332,7 @@ async def build_factory(message: types.Message):
 
 # --- War System ---
 
-@router.message(F.text.lower().startswith("!объявить войну"))
+@router.message(F.text.regexp(r'(?i)^[!/]объявить войну'))
 async def declare_war(message: types.Message):
     args = message.text.split(maxsplit=2)
     # Expecting: !объявить войну Target
@@ -396,7 +396,7 @@ async def declare_war(message: types.Message):
     
     await message.answer(f"⚔️ Клан <b>{html.escape(attacker['name'])}</b> объявил войну клану <b>{html.escape(defender['name'])}</b>!\nГотовьтесь к битвам!")
 
-@router.message(F.text.lower() == "!белый мир")
+@router.message(F.text.regexp(r'(?i)^[!/]белый мир'))
 async def white_peace(message: types.Message):
     user_id = str(message.from_user.id)
     user = get_or_create_user(user_id, message.from_user.username or message.from_user.first_name)
@@ -438,7 +438,7 @@ async def white_peace(message: types.Message):
         war_ref.update({'white_peace_offer': clan_id})
         await message.answer("🕊 Вы предложили белый мир. Чтобы он вступил в силу, лидер вражеского клана должен также написать <code>!белый мир</code>.")
 
-@router.message(Command("капитуляция", prefix="!"))
+@router.message(Command("капитуляция", prefix="!/"))
 async def capitulate(message: types.Message):
     user_id = str(message.from_user.id)
     user = get_or_create_user(user_id, message.from_user.username or message.from_user.first_name)
@@ -491,7 +491,7 @@ async def capitulate(message: types.Message):
     war_ref.delete()
     await message.answer(f"🏳️ Ваш клан капитулировал! Вы потеряли 50% опыта, часть заводов и {stolen_gold} золота.")
 
-@router.message(Command("аннексия", prefix="!"))
+@router.message(Command("аннексия", prefix="!/"))
 async def annex(message: types.Message):
     user_id = str(message.from_user.id)
     user = get_or_create_user(user_id, message.from_user.username or message.from_user.first_name)
