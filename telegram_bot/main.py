@@ -4,14 +4,14 @@ from aiogram import Bot, Dispatcher
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 from config import BOT_TOKEN
-from db import init_db
+from firebase_db import init_firebase
 from handlers import router
 from war import war_tick_loop
 
 logging.basicConfig(level=logging.INFO)
 
 async def main():
-    init_db()
+    init_firebase()
     bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     dp = Dispatcher()
     dp.include_router(router)

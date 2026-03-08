@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from datetime import datetime, timedelta
-from db import get_conn
+from firebase_db import get_db_ref
 from config import WAR_TICK_HOURS
 
 async def war_tick_loop(bot):
@@ -13,52 +13,51 @@ async def war_tick_loop(bot):
         await asyncio.sleep(60) # Check every minute if a tick is due
 
 async def process_wars(bot):
-    conn = get_conn()
-    c = conn.cursor()
-    c.execute("SELECT * FROM wars")
-    wars = c.fetchall()
+    wars_ref = get_db_ref('wars')
+    wars = wars_ref.get() or {}
     
     now = datetime.now()
     
-    for war in wars:
-        last_tick = datetime.fromisoformat(war['last_tick'])
+    for war_id, war in wars.items():
+        last_tick_str = war.get('last_tick')
+        if not last_tick_str: continue
+        last_tick = datetime.fromisoformat(last_tick_str)
+        
         if now - last_tick >= timedelta(hours=WAR_TICK_HOURS):
-            # Process tick
-            c.execute("SELECT * FROM clans WHERE id = ?", (war['attacker_id'],))
-            attacker = c.fetchone()
-            c.execute("SELECT * FROM clans WHERE id = ?", (war['defender_id'],))
-            defender = c.fetchone()
+            attacker_id = war['attacker_id']
+            defender_id = war['defender_id']
             
-            c.execute("SELECT SUM(army) as total FROM users WHERE clan_id = ?", (attacker['id'],))
-            att_army = c.fetchone()['total'] or 0
+            attacker = get_db_ref(f'clans/{attacker_id}').get()
+            defender = get_db_ref(f'clans/{defender_id}').get()
             
-            c.execute("SELECT SUM(army) as total FROM users WHERE clan_id = ?", (defender['id'],))
-            def_army = c.fetchone()['total'] or 0
+            if not attacker or not defender:
+                continue
+                
+            all_users = get_db_ref('users').get() or {}
+            att_army = sum(u.get('army', 0) for u in all_users.values() if u.get('clan_id') == attacker_id)
+            def_army = sum(u.get('army', 0) for u in all_users.values() if u.get('clan_id') == defender_id)
             
-            att_power = att_army * attacker['power_level'] * (1 + 0.05 * attacker['factory_weapon'])
-            def_power = def_army * defender['defense_level'] * (1 + 0.05 * defender['factory_defense'])
+            att_power = att_army * attacker.get('power_level', 1) * (1 + 0.05 * attacker.get('factory_weapon', 0))
+            def_power = def_army * defender.get('defense_level', 1) * (1 + 0.05 * defender.get('factory_defense', 0))
             
             damage = int(att_power - def_power)
             
             msg = ""
             if damage > 0:
                 # Defender takes damage
-                new_hp = max(0, defender['capital_hp'] - damage)
-                c.execute("UPDATE clans SET capital_hp = ? WHERE id = ?", (new_hp, defender['id']))
+                new_hp = max(0, defender.get('capital_hp', 1000) - damage)
+                get_db_ref(f'clans/{defender_id}').update({'capital_hp': new_hp})
                 msg = f"🔥 Клан <b>{attacker['name']}</b> прорвал оборону! Столица <b>{defender['name']}</b> получила {damage} урона. (Осталось: {new_hp} HP)"
             elif damage < 0:
                 # Attacker takes damage
-                new_hp = max(0, attacker['capital_hp'] - abs(damage))
-                c.execute("UPDATE clans SET capital_hp = ? WHERE id = ?", (new_hp, attacker['id']))
+                new_hp = max(0, attacker.get('capital_hp', 1000) - abs(damage))
+                get_db_ref(f'clans/{attacker_id}').update({'capital_hp': new_hp})
                 msg = f"🛡️ Клан <b>{defender['name']}</b> отразил атаку! Столица <b>{attacker['name']}</b> получила {abs(damage)} урона. (Осталось: {new_hp} HP)"
             else:
                 msg = f"⚔️ Битва между <b>{attacker['name']}</b> и <b>{defender['name']}</b> завершилась вничью. Никто не получил урона."
                 
-            c.execute("UPDATE wars SET last_tick = ? WHERE id = ?", (now.isoformat(), war['id']))
-            conn.commit()
+            get_db_ref(f'wars/{war_id}').update({'last_tick': now.isoformat()})
             
             # Here we would send message to the global chat if we had its ID.
             # For now, we just log it. In a real bot, we'd broadcast to a specific channel or to leaders.
             logging.info(msg)
-            
-    conn.close()
