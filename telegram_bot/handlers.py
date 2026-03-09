@@ -367,6 +367,7 @@ async def process_set_leader(message: types.Message, state: FSMContext):
                 await message.answer("⚠️ Пользователь не найден.")
             else:
                 get_db_ref(f'clans/{clan_id}').update({'leader_id': uid})
+                get_db_ref(f'users/{uid}').update({'clan_id': clan_id})
                 name = udata.get('username', uid)
                 await message.answer(f"✅ Лидер клана {html.escape(clan_data.get('name', clan_id))} изменен на {format_user_link(uid, name)}.")
     except:
@@ -466,12 +467,44 @@ async def cmd_start(message: types.Message):
 async def cmd_boevik(message: types.Message):
     text = (
         "📚 <b>Справочник команд:</b>\n\n"
-        "Используйте следующие команды для получения подробной справки по разделам:\n"
-        "• /кланы — Управление кланом\n"
-        "• /работы — Заработок монет\n"
-        "• /справка_экономика — Экономика и производство\n"
-        "• /военное — Война и развитие\n"
-        "• /другое — Прочие команды"
+        "🏰 <b>Кланы:</b>\n"
+        "• /создать клан [имя] [тег] — Основать клан\n"
+        "• /вступить [тег/номер] — Присоединиться к клану\n"
+        "• /клан — Меню клана\n"
+        "• /выйти — Покинуть клан\n"
+        "• /удалить клан — Удалить клан (лидер)\n"
+        "• /переименовать клан [имя] — Сменить название\n"
+        "• /кик [юз] — Исключить игрока (лидер)\n"
+        "• /передать права [юз] — Передать лидерство\n"
+        "• /список кланов — Топ кланов\n"
+        "• /мой клан — Инфо о клане\n\n"
+        "💰 <b>Работы:</b>\n"
+        "• /работа — Основная работа (КД 1 ч)\n"
+        "• /работа2 — Вторая работа (КД 2 ч)\n"
+        "• /подработка — Мелкий заработок (КД 30 мин)\n"
+        "• /устроиться — Крупный заработок (КД 6 ч)\n"
+        "• /строй завод — Строительство (лидер, КД 10 мин)\n\n"
+        "📈 <b>Экономика:</b>\n"
+        "• /экономика — Инфо о ресурсах и производстве\n"
+        "• /создать производство [товар] — 1000 💰\n"
+        "• /улучшить производство [товар] — Ускорить добычу\n"
+        "• /продать товар [название] [шт] — Продать ресурсы\n"
+        "• /купить [id] [кол-во] — Купить на рынке\n\n"
+        "⚔️ <b>Военное:</b>\n"
+        "• /объявить войну [клан] — Начать войну\n"
+        "• /мир [клан] [ресурс/монеты] [кол-во] — Предложить мир\n"
+        "• /мобилизация — Нанять армию\n"
+        "• /тренировка — Увеличить силу\n"
+        "• /атака [кол-во] — Атаковать врага\n"
+        "• /оборона [кол-во] — Защищать клан\n"
+        "• /столица [сумма] — Улучшить столицу\n"
+        "• /ультиматум [клан] [текст] — Выдвинуть ультиматум\n"
+        "• /разработка — Вклад в ракеты\n"
+        "• /пуск [тип] [цель] — Ядерный удар\n\n"
+        "🤝 <b>Другое:</b>\n"
+        "• /предложить альянс [клан] — Создать союз\n"
+        "• /разорвать альянс [клан] — Расторгнуть союз\n"
+        "• /профиль — Твоя личная статистика"
     )
     await message.answer(text)
 
@@ -489,11 +522,11 @@ async def cmd_economy(message: types.Message):
 
 @router.message(Command("военное"))
 async def cmd_war(message: types.Message):
-    await message.answer("⚔️ <b>Военное:</b>\n• /объявить войну [клан]\n• /мир [клан] [ресурс/монеты] [кол-во]\n• /мобилизация — Нанять армию\n• /тренировка — Увеличить силу\n• /атака [кол-во]\n• /оборона [кол-во]\n• /столица [сумма]\n• /ультиматум [клан] [текст]\n• /баллистика — Купить баллистику\n• /ядерка — Купить ядерку")
+    await message.answer("⚔️ <b>Военное:</b>\n• /объявить войну [клан]\n• /мир [клан] [ресурс/монеты] [кол-во]\n• /мобилизация — Нанять армию\n• /тренировка — Увеличить силу\n• /атака [кол-во]\n• /оборона [кол-во]\n• /столица [сумма]\n• /ультиматум [клан] [текст]\n• /разработка — Вклад в ракеты\n• /пуск [тип] [цель] — Ядерный удар")
 
 @router.message(Command("другое"))
 async def cmd_other(message: types.Message):
-    await message.answer("🤝 <b>Другое:</b>\n• /boevik — Справочник\n• /предложить альянс [клан]\n• /разорвать альянс [клан]\n• /разработка — Вклад в ракеты\n• /пуск [тип] [цель] — Ядерный удар")
+    await message.answer("🤝 <b>Другое:</b>\n• /boevik — Справочник\n• /предложить альянс [клан]\n• /разорвать альянс [клан]")
 
 
 @router.message(F.text.regexp(r'(?i)^/переименовать клан'))
@@ -1440,7 +1473,7 @@ async def clan_callbacks(callback: types.CallbackQuery):
     elif action == "dev":
         # c_dev_type_userid
         dtype = parts[2] # баллистика or ядерка
-        cost = 1000 if dtype == 'баллистика' else 5000
+        cost = 10000 if dtype == 'баллистика' else 100000
         if clan.get('money', 0) < cost:
             await callback.answer(f"⚠️ Недостаточно монет (нужно {cost}).", show_alert=True)
             return
@@ -1822,8 +1855,8 @@ async def develop(message: types.Message, user_id=None, username=None):
         get_db_ref(f'users/{uid}').update({'last_rocket_dev': now.isoformat()})
 
     builder = InlineKeyboardBuilder()
-    builder.button(text="🚀 Баллистика (1000)", callback_data=f"c_dev_баллистика_{uid}")
-    builder.button(text="☢️ Ядерка (5000)", callback_data=f"c_dev_ядерка_{uid}")
+    builder.button(text="🚀 Баллистика (10000)", callback_data=f"c_dev_баллистика_{uid}")
+    builder.button(text="☢️ Ядерка (100000)", callback_data=f"c_dev_ядерка_{uid}")
     builder.adjust(1)
     await message.answer("🧪 <b>Выберите проект:</b>", reply_markup=builder.as_markup())
 
@@ -1963,6 +1996,11 @@ async def work1(message: types.Message):
     if not is_bot_active(): return
     uid = str(message.from_user.id)
     user = get_or_create_user(uid, message.from_user.username or message.from_user.first_name)
+    clan_id = user.get('clan_id')
+    if not clan_id:
+        await message.answer("⚠️ Вы не в клане.")
+        return
+        
     now = datetime.now()
     if user.get('last_work1'):
         last_work = datetime.fromisoformat(user['last_work1'])
@@ -1971,15 +2009,23 @@ async def work1(message: types.Message):
             await message.answer(f"⏳ КД! Осталось: {rem.seconds//60}м")
             return
     earnings = random.randint(100, 200)
-    new_money = user.get('money', 0) + earnings
-    get_db_ref(f'users/{uid}').update({'money': new_money, 'last_work1': now.isoformat()})
-    await message.answer(f"🔨 Вы заработали {earnings} монет на основной работе! Новое значение: {new_money}")
+    clan_ref = get_db_ref(f'clans/{clan_id}')
+    clan = clan_ref.get()
+    new_money = clan.get('money', 0) + earnings
+    clan_ref.update({'money': new_money})
+    get_db_ref(f'users/{uid}').update({'last_work1': now.isoformat()})
+    await message.answer(f"🔨 Вы заработали {earnings} монет для клана на основной работе! В казне: {new_money}")
 
 @router.message(Command("работа2"))
 async def work2(message: types.Message):
     if not is_bot_active(): return
     uid = str(message.from_user.id)
     user = get_or_create_user(uid, message.from_user.username or message.from_user.first_name)
+    clan_id = user.get('clan_id')
+    if not clan_id:
+        await message.answer("⚠️ Вы не в клане.")
+        return
+        
     now = datetime.now()
     if user.get('last_work2'):
         last_work = datetime.fromisoformat(user['last_work2'])
@@ -1988,8 +2034,12 @@ async def work2(message: types.Message):
             await message.answer(f"⏳ КД! Осталось: {rem.seconds//3600}ч {(rem.seconds//60)%60}м")
             return
     earnings = random.randint(150, 250)
-    get_db_ref(f'users/{uid}').update({'money': user.get('money', 0) + earnings, 'last_work2': now.isoformat()})
-    await message.answer(f"🔨 Вы заработали {earnings} монет на второй работе!")
+    clan_ref = get_db_ref(f'clans/{clan_id}')
+    clan = clan_ref.get()
+    new_money = clan.get('money', 0) + earnings
+    clan_ref.update({'money': new_money})
+    get_db_ref(f'users/{uid}').update({'last_work2': now.isoformat()})
+    await message.answer(f"🔨 Вы заработали {earnings} монет для клана на второй работе! В казне: {new_money}")
 
 @router.message(F.text.regexp(r'(?i)^/продать товар'))
 async def sell_item(message: types.Message):
