@@ -465,9 +465,15 @@ async def cmd_start(message: types.Message):
 
 @router.message(Command("boevik"))
 async def cmd_boevik(message: types.Message):
-    if not is_bot_active():
-        await message.answer("⚠️ Бот временно отключен на технические работы.")
-        return
+    # Try to check if bot is active, but proceed anyway if it fails
+    try:
+        if not is_bot_active():
+            await message.answer("⚠️ Бот временно отключен на технические работы.")
+            return
+    except Exception as e:
+        logging.error(f"Error checking bot status in boevik: {e}")
+        # Proceed anyway
+
     text = (
         "⚔️ <b>Справочник Клан-Бота</b> ⚔️\n\n"
         "🏰 <b>Управление кланом:</b>\n"
@@ -497,7 +503,7 @@ async def cmd_boevik(message: types.Message):
         "• /строй завод [оружейный/финансовый/оборонительный] — Построить завод. КД: 10 мин (только лидер)\n\n"
         "Бот работает в группах! Добавьте его в чат вашего клана."
     )
-    await message.answer(text)
+    await message.answer(text, parse_mode="HTML")
 
 @router.message(Command("кланы"))
 async def cmd_clans(message: types.Message):
