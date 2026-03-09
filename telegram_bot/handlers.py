@@ -20,7 +20,7 @@ from aiogram.types import InlineKeyboardButton
 class AdminStates(StatesGroup):
     waiting_for_broadcast = State()
     waiting_for_sleep_time = State()
-    waiting_for_gold = State()
+    waiting_for_money = State()
     waiting_for_army = State()
     waiting_for_delete_clan = State()
     waiting_for_end_war = State()
@@ -140,7 +140,7 @@ def get_or_create_user(user_id, username):
             'clan_id': None,
             'army': 0,
             'strength': 1,
-            'gold': 0,
+            'money': 0,
             'last_mobilization': None,
             'last_train': None,
             'last_factory': None
@@ -174,7 +174,7 @@ async def show_admin_panel(message, page=1):
         builder.button(text="🌙 Сон", callback_data="admin_set_sleep")
         builder.button(text="📢 Рассылка", callback_data="admin_broadcast")
         builder.button(text="📊 Статистика", callback_data="admin_stats")
-        builder.button(text="💰 +Золото", callback_data="admin_add_gold")
+        builder.button(text="💰 +Монеты", callback_data="admin_add_money")
         builder.button(text="⚔️ +Армия", callback_data="admin_add_army")
         builder.button(text="🗑 Удалить клан", callback_data="admin_del_clan")
         builder.button(text="🕊 Стоп война", callback_data="admin_end_war")
@@ -228,9 +228,9 @@ async def admin_callbacks(callback: types.CallbackQuery, state: FSMContext):
     elif action == "admin_broadcast":
         await callback.message.edit_text("Введите текст для рассылки:")
         await state.set_state(AdminStates.waiting_for_broadcast)
-    elif action == "admin_add_gold":
-        await callback.message.edit_text("Введите ID клана и количество золота (через пробел):")
-        await state.set_state(AdminStates.waiting_for_gold)
+    elif action == "admin_add_money":
+        await callback.message.edit_text("Введите ID клана и количество монет (через пробел):")
+        await state.set_state(AdminStates.waiting_for_money)
     elif action == "admin_add_army":
         await callback.message.edit_text("Введите ID пользователя и количество армии (через пробел):")
         await state.set_state(AdminStates.waiting_for_army)
@@ -278,8 +278,8 @@ async def process_broadcast(message: types.Message, state: FSMContext):
     await state.clear()
     await show_admin_panel(message, page=1)
 
-@router.message(AdminStates.waiting_for_gold)
-async def process_add_gold(message: types.Message, state: FSMContext):
+@router.message(AdminStates.waiting_for_money)
+async def process_add_money(message: types.Message, state: FSMContext):
     try:
         query, amount = message.text.split()
         amount = int(amount)
@@ -287,13 +287,13 @@ async def process_add_gold(message: types.Message, state: FSMContext):
         if not clan_id:
             await message.answer("⚠️ Клан не найден.")
         else:
-            current = clan_data.get('gold', 0)
-            new_gold = current + amount
-            print(f"DEBUG: clan_id={clan_id}, current={current}, amount={amount}, new_gold={new_gold}")
-            get_db_ref(f'clans/{clan_id}').update({'gold': new_gold})
-            await message.answer(f"✅ Выдано {amount} золота клану {html.escape(clan_data.get('name', clan_id))}. Новое значение: {new_gold}")
+            current = clan_data.get('money', 0)
+            new_money = current + amount
+            print(f"DEBUG: clan_id={clan_id}, current={current}, amount={amount}, new_money={new_money}")
+            get_db_ref(f'clans/{clan_id}').update({'money': new_money})
+            await message.answer(f"✅ Выдано {amount} монет клану {html.escape(clan_data.get('name', clan_id))}. Новое значение: {new_money}")
     except Exception as e:
-        print(f"DEBUG: Error in process_add_gold: {e}")
+        print(f"DEBUG: Error in process_add_money: {e}")
         await message.answer(f"⚠️ Ошибка формата или БД: {e}")
     await state.clear()
     await show_admin_panel(message, page=1)
@@ -476,7 +476,7 @@ async def cmd_economy(message: types.Message):
 
 @router.message(Command("военное"))
 async def cmd_war(message: types.Message):
-    await message.answer("⚔️ <b>Военное:</b>\n• /объявить войну [клан]\n• /мир [клан] [ресурс/золото] [кол-во]\n• /мобилизация — Нанять армию\n• /тренировка — Увеличить силу\n• /атака [кол-во]\n• /оборона [кол-во]\n• /столица [сумма]\n• /ультиматум [клан] [текст]\n• /баллистика — Купить баллистику\n• /ядерка — Купить ядерку")
+    await message.answer("⚔️ <b>Военное:</b>\n• /объявить войну [клан]\n• /мир [клан] [ресурс/монеты] [кол-во]\n• /мобилизация — Нанять армию\n• /тренировка — Увеличить силу\n• /атака [кол-во]\n• /оборона [кол-во]\n• /столица [сумма]\n• /ультиматум [клан] [текст]\n• /баллистика — Купить баллистику\n• /ядерка — Купить ядерку")
 
 @router.message(Command("другое"))
 async def cmd_other(message: types.Message):
@@ -529,8 +529,8 @@ async def create_clan(message: types.Message):
             return
 
     # Cost 1000 (virtual check, maybe free for now or check user balance if implemented)
-    # Assuming free creation based on previous context, or check user gold? 
-    # Previous code didn't strictly enforce user gold for creation, but let's assume free for simplicity unless specified.
+    # Assuming free creation based on previous context, or check user money? 
+    # Previous code didn't strictly enforce user money for creation, but let's assume free for simplicity unless specified.
     
     new_clan_ref = get_db_ref('clans').push()
     clan_id = new_clan_ref.key
@@ -538,7 +538,7 @@ async def create_clan(message: types.Message):
         'name': name,
         'tag': tag,
         'leader_id': user_id,
-        'gold': 0,
+        'money': 0,
         'army': 0,
         'chat_id': message.chat.id,
         'created_at': datetime.now().isoformat(),
@@ -645,7 +645,7 @@ async def list_clans(message: types.Message):
     lines = ["🏆 <b>Кланы этой группы:</b>\n"]
     for i, c in enumerate(group_clans, 1):
         members = sum(1 for u in all_users.values() if u.get('clan_id') == c['id'])
-        lines.append(f"{i}. <b>{html.escape(c.get('name', ''))}</b> [{html.escape(c.get('tag', ''))}] — 👥 {members} | 💰 {c.get('gold', 0)} | 🌟 {c.get('exp', 0)}")
+        lines.append(f"{i}. <b>{html.escape(c.get('name', ''))}</b> [{html.escape(c.get('tag', ''))}] — 👥 {members} | 💰 {c.get('money', 0)} | 🌟 {c.get('exp', 0)}")
     await message.answer("\n".join(lines))
 
 @router.message(F.text.regexp(r'(?i)^/клан'))
@@ -665,7 +665,7 @@ async def clan_menu(message: types.Message):
     text = (
         f"🏰 <b>Клан: {html.escape(clan.get('name', ''))}</b>\n"
         f"🏷 Тег: {html.escape(clan.get('tag', ''))}\n"
-        f"💰 Казна: {clan.get('gold', 0)}\n"
+        f"💰 Казна: {clan.get('money', 0)}\n"
         f"🌟 Опыт: {clan.get('exp', 0)}\n"
         f"👥 Лимит: {clan.get('population_limit', 10)}\n"
         f"Ваша роль: {role}\n"
@@ -784,7 +784,7 @@ async def propose_peace(message: types.Message):
     if not is_bot_active(): return
     args = message.text.split(maxsplit=3)
     if len(args) < 4:
-        await message.answer("⚠️ Использование: <code>/мир [клан] [ресурс/золото] [кол-во]</code>")
+        await message.answer("⚠️ Использование: <code>/мир [клан] [ресурс/монеты] [кол-во]</code>")
         return
         
     query = args[1].lower().strip('[]')
@@ -854,12 +854,12 @@ async def peace_callback(callback: types.CallbackQuery):
         amount = int(parts[5])
         
         # Check if target can pay
-        if item == 'золото':
-            if target_clan.get('gold', 0) < amount:
-                await callback.answer("⚠️ У вашего клана недостаточно золота для выплаты контрибуции!", show_alert=True)
+        if item == 'монеты':
+            if target_clan.get('money', 0) < amount:
+                await callback.answer("⚠️ У вашего клана недостаточно монет для выплаты контрибуции!", show_alert=True)
                 return
-            get_db_ref(f'clans/{target_id}').update({'gold': target_clan.get('gold', 0) - amount})
-            get_db_ref(f'clans/{sender_id}').update({'gold': sender_clan.get('gold', 0) + amount})
+            get_db_ref(f'clans/{target_id}').update({'money': target_clan.get('money', 0) - amount})
+            get_db_ref(f'clans/{sender_id}').update({'money': sender_clan.get('money', 0) + amount})
         else:
             resources = target_clan.get('resources', {})
             if resources.get(item, 0) < amount:
@@ -1083,18 +1083,18 @@ async def attack(message: types.Message):
         loser_id = war['defender_id'] if is_attacker else war['attacker_id']
         loser = get_db_ref(f'clans/{loser_id}').get()
         
-        loot = int(loser.get('gold', 0) * 0.5)
+        loot = int(loser.get('money', 0) * 0.5)
         get_db_ref(f'clans/{winner_id}').update({
-            'gold': clan.get('gold', 0) + loot,
+            'money': clan.get('money', 0) + loot,
             'exp': clan.get('exp', 0) + 50,
             'war_id': None
         })
         get_db_ref(f'clans/{loser_id}').update({
-            'gold': int(loser.get('gold', 0) * 0.5),
+            'money': int(loser.get('money', 0) * 0.5),
             'war_id': None
         })
         get_db_ref(f'wars/{war_id}').delete()
-        await message.answer(f"🏆 <b>ПОБЕДА!</b>\nКлан <b>{html.escape(clan.get('name', ''))}</b> победил! Награблено: {loot} золота.")
+        await message.answer(f"🏆 <b>ПОБЕДА!</b>\nКлан <b>{html.escape(clan.get('name', ''))}</b> победил! Награблено: {loot} монет.")
         if loser.get('chat_id'):
             try:
                 await message.bot.send_message(loser['chat_id'], f"☠️ <b>ПОРАЖЕНИЕ!</b>\nВаш клан проиграл войну клану <b>{html.escape(clan.get('name', ''))}</b>.")
@@ -1136,8 +1136,8 @@ async def upgrade_capital(message: types.Message):
     clan_id = user.get('clan_id')
     if not clan_id: return
     clan = get_db_ref(f'clans/{clan_id}').get()
-    if clan.get('gold', 0) < amount:
-        await message.answer("⚠️ Недостаточно золота в казне.")
+    if clan.get('money', 0) < amount:
+        await message.answer("⚠️ Недостаточно монет в казне.")
         return
     
     war_id = clan.get('war_id')
@@ -1153,7 +1153,7 @@ async def upgrade_capital(message: types.Message):
     hp_gain = (amount // 500) * 18
     new_hp = min(250, current_hp + hp_gain) # Cap at 250? Or just add. Let's cap for balance or just add.
     
-    get_db_ref(f'clans/{clan_id}').update({'gold': clan.get('gold', 0) - amount})
+    get_db_ref(f'clans/{clan_id}').update({'money': clan.get('money', 0) - amount})
     get_db_ref(f'wars/{war_id}').update({hp_field: new_hp})
     
     await message.answer(f"🏰 Столица укреплена! +{hp_gain} HP. Текущее HP: {new_hp}")
@@ -1409,8 +1409,8 @@ async def clan_callbacks(callback: types.CallbackQuery):
         # c_build_1_userid
         btype = parts[2]
         cost = 500
-        if clan.get('gold', 0) < cost:
-            await callback.answer("⚠️ Недостаточно золота (нужно 500).", show_alert=True)
+        if clan.get('money', 0) < cost:
+            await callback.answer("⚠️ Недостаточно монет (нужно 500).", show_alert=True)
             return
         
         field = 'factory_weapon'
@@ -1418,7 +1418,7 @@ async def clan_callbacks(callback: types.CallbackQuery):
         elif btype == '3': field = 'factory_defense'
         
         get_db_ref(f'clans/{clan_id}').update({
-            'gold': clan.get('gold', 0) - cost,
+            'money': clan.get('money', 0) - cost,
             field: clan.get(field, 0) + 1,
             'population_limit': clan.get('population_limit', 10) + (10 if btype == '1' else 0)
         })
@@ -1428,13 +1428,13 @@ async def clan_callbacks(callback: types.CallbackQuery):
         # c_dev_type_userid
         dtype = parts[2] # баллистика or ядерка
         cost = 1000 if dtype == 'баллистика' else 5000
-        if clan.get('gold', 0) < cost:
-            await callback.answer(f"⚠️ Недостаточно золота (нужно {cost}).", show_alert=True)
+        if clan.get('money', 0) < cost:
+            await callback.answer(f"⚠️ Недостаточно монет (нужно {cost}).", show_alert=True)
             return
         
         field = 'prog_ballistic' if dtype == 'баллистика' else 'prog_nuclear'
         get_db_ref(f'clans/{clan_id}').update({
-            'gold': clan.get('gold', 0) - cost,
+            'money': clan.get('money', 0) - cost,
             field: clan.get(field, 0) + 10 # +10 progress
         })
         await callback.answer(f"✅ Вклад в {dtype} внесен (+10%)!", show_alert=True)
@@ -1530,8 +1530,8 @@ async def create_production(message: types.Message):
         await message.answer("⚠️ Только лидер может создавать производство.")
         return
         
-    if clan.get('gold', 0) < 1000:
-        await message.answer("⚠️ Недостаточно золота (нужно 1000).")
+    if clan.get('money', 0) < 1000:
+        await message.answer("⚠️ Недостаточно монет (нужно 1000).")
         return
         
     productions = clan.get('productions', {})
@@ -1541,7 +1541,7 @@ async def create_production(message: types.Message):
         
     productions[item] = {'level': 1, 'last_collected': datetime.now().isoformat()}
     get_db_ref(f'clans/{clan_id}').update({
-        'gold': clan.get('gold', 0) - 1000,
+        'money': clan.get('money', 0) - 1000,
         'productions': productions
     })
     await message.answer(f"✅ Производство <b>{html.escape(item)}</b> создано! Скорость: 10 шт/час.")
@@ -1572,13 +1572,13 @@ async def upgrade_production(message: types.Message):
         
     level = productions[item].get('level', 1)
     cost = level * 1000
-    if clan.get('gold', 0) < cost:
-        await message.answer(f"⚠️ Недостаточно золота (нужно {cost}).")
+    if clan.get('money', 0) < cost:
+        await message.answer(f"⚠️ Недостаточно монет (нужно {cost}).")
         return
         
     productions[item]['level'] = level + 1
     get_db_ref(f'clans/{clan_id}').update({
-        'gold': clan.get('gold', 0) - cost,
+        'money': clan.get('money', 0) - cost,
         'productions': productions
     })
     await message.answer(f"✅ Производство <b>{html.escape(item)}</b> улучшено до {level+1} уровня! Скорость: {(level+1)*10} шт/час.")
@@ -1597,7 +1597,7 @@ async def economy_menu(message: types.Message):
     clan = get_db_ref(f'clans/{clan_id}').get()
     
     text = f"📊 <b>Экономика клана {html.escape(clan.get('name', ''))}</b>\n\n"
-    text += f"💰 Золото: <b>{clan.get('gold', 0)}</b>\n\n"
+    text += f"💰 Монеты: <b>{clan.get('money', 0)}</b>\n\n"
     
     resources = clan.get('resources', {})
     text += "📦 <b>Ресурсы:</b>\n"
@@ -1667,27 +1667,27 @@ async def buy_item(message: types.Message):
     price_per_unit = lot.get('price', 0)
     total_cost = amount_to_buy * price_per_unit
     
-    if buyer_clan.get('gold', 0) < total_cost:
-        await message.answer(f"⚠️ Недостаточно золота (нужно {total_cost}).")
+    if buyer_clan.get('money', 0) < total_cost:
+        await message.answer(f"⚠️ Недостаточно монет (нужно {total_cost}).")
         return
         
     # Process transaction
     seller_clan_id = lot.get('clan_id')
     seller_clan = get_db_ref(f'clans/{seller_clan_id}').get()
     
-    # Deduct gold and add resource to buyer
+    # Deduct money and add resource to buyer
     buyer_resources = buyer_clan.get('resources', {})
     item = lot.get('item')
     buyer_resources[item] = buyer_resources.get(item, 0) + amount_to_buy
     get_db_ref(f'clans/{buyer_clan_id}').update({
-        'gold': buyer_clan.get('gold', 0) - total_cost,
+        'money': buyer_clan.get('money', 0) - total_cost,
         'resources': buyer_resources
     })
     
-    # Add gold to seller
+    # Add money to seller
     if seller_clan:
         get_db_ref(f'clans/{seller_clan_id}').update({
-            'gold': seller_clan.get('gold', 0) + total_cost
+            'money': seller_clan.get('money', 0) + total_cost
         })
         
     # Update or delete lot
@@ -1728,10 +1728,10 @@ async def work(message: types.Message, user_id=None, username=None):
     earnings = random.randint(50, 150)
     clan_ref = get_db_ref(f'clans/{clan_id}')
     clan = clan_ref.get()
-    clan_ref.update({'gold': clan.get('gold', 0) + earnings})
+    clan_ref.update({'money': clan.get('money', 0) + earnings})
     get_db_ref(f'users/{uid}').update({'last_work': now.isoformat()})
     
-    await message.answer(f"🔨 Вы заработали {earnings} золота для клана!")
+    await message.answer(f"🔨 Вы заработали {earnings} монет для клана!")
 
 @router.message(F.text.regexp(r'(?i)^/устроиться'))
 async def job(message: types.Message, user_id=None, username=None):
@@ -1757,10 +1757,10 @@ async def job(message: types.Message, user_id=None, username=None):
     earnings = random.randint(300, 600)
     clan_ref = get_db_ref(f'clans/{clan_id}')
     clan = clan_ref.get()
-    clan_ref.update({'gold': clan.get('gold', 0) + earnings})
+    clan_ref.update({'money': clan.get('money', 0) + earnings})
     get_db_ref(f'users/{user_id}').update({'last_job': now.isoformat()})
     
-    await message.answer(f"💼 Вы заработали {earnings} золота для клана!")
+    await message.answer(f"💼 Вы заработали {earnings} монет для клана!")
 
 @router.message(F.text.regexp(r'(?i)^/строй завод'))
 async def build_factory(message: types.Message, user_id=None, username=None):
@@ -1866,13 +1866,13 @@ async def launch(message: types.Message):
     # Reset progress
     get_db_ref(f'clans/{clan_id}').update({f'prog_{"ballistic" if rtype == "баллистика" else "nuclear"}': 0})
     
-    # Damage logic (reduce gold, army, factories?)
-    t_gold = target_clan.get('gold', 0)
+    # Damage logic (reduce money, army, factories?)
+    t_money = target_clan.get('money', 0)
     
-    loss_gold = int(t_gold * (0.3 if rtype == 'баллистика' else 0.6))
-    get_db_ref(f'clans/{target_id}').update({'gold': max(0, t_gold - loss_gold)})
+    loss_money = int(t_money * (0.3 if rtype == 'баллистика' else 0.6))
+    get_db_ref(f'clans/{target_id}').update({'money': max(0, t_money - loss_money)})
     
-    await message.answer(f"🚀 <b>ПУСК!</b> Ракета {rtype} поразила <b>{html.escape(target_clan.get('name', ''))}</b>!\nУничтожено {loss_gold} золота.")
+    await message.answer(f"🚀 <b>ПУСК!</b> Ракета {rtype} поразила <b>{html.escape(target_clan.get('name', ''))}</b>!\nУничтожено {loss_money} монет.")
     if target_clan.get('chat_id'):
         try:
             await message.bot.send_message(target_clan['chat_id'], f"💥 <b>ВНИМАНИЕ!</b>\nПо вам нанесен ракетный удар ({rtype}) от клана <b>{html.escape(clan.get('name', ''))}</b>!")
@@ -1941,7 +1941,7 @@ async def promo(message: types.Message):
     
     user_ref = get_db_ref(f'users/{uid}')
     user = user_ref.get() or {}
-    user_ref.update({'gold': user.get('gold', 0) + 1000})
+    user_ref.update({'money': user.get('money', 0) + 1000})
     promo_ref.set({'used_by': uid})
     await message.answer("✅ Промокод активирован! Вам начислено 1000 монет.")
 
@@ -1950,19 +1950,32 @@ async def work1(message: types.Message):
     if not is_bot_active(): return
     uid = str(message.from_user.id)
     user = get_or_create_user(uid, message.from_user.username or message.from_user.first_name)
+    now = datetime.now()
+    if user.get('last_work1'):
+        last_work = datetime.fromisoformat(user['last_work1'])
+        if now - last_work < timedelta(hours=1):
+            rem = timedelta(hours=1) - (now - last_work)
+            await message.answer(f"⏳ КД! Осталось: {rem.seconds//60}м")
+            return
     earnings = random.randint(100, 200)
-    new_gold = user.get('gold', 0) + earnings
-    print(f"DEBUG: uid={uid}, current={user.get('gold', 0)}, earnings={earnings}, new_gold={new_gold}")
-    get_db_ref(f'users/{uid}').update({'gold': new_gold})
-    await message.answer(f"🔨 Вы заработали {earnings} монет на основной работе! Новое значение: {new_gold}")
+    new_money = user.get('money', 0) + earnings
+    get_db_ref(f'users/{uid}').update({'money': new_money, 'last_work1': now.isoformat()})
+    await message.answer(f"🔨 Вы заработали {earnings} монет на основной работе! Новое значение: {new_money}")
 
 @router.message(Command("работа2"))
 async def work2(message: types.Message):
     if not is_bot_active(): return
     uid = str(message.from_user.id)
     user = get_or_create_user(uid, message.from_user.username or message.from_user.first_name)
+    now = datetime.now()
+    if user.get('last_work2'):
+        last_work = datetime.fromisoformat(user['last_work2'])
+        if now - last_work < timedelta(hours=2):
+            rem = timedelta(hours=2) - (now - last_work)
+            await message.answer(f"⏳ КД! Осталось: {rem.seconds//3600}ч {(rem.seconds//60)%60}м")
+            return
     earnings = random.randint(150, 250)
-    get_db_ref(f'users/{uid}').update({'gold': user.get('gold', 0) + earnings})
+    get_db_ref(f'users/{uid}').update({'money': user.get('money', 0) + earnings, 'last_work2': now.isoformat()})
     await message.answer(f"🔨 Вы заработали {earnings} монет на второй работе!")
 
 @router.message(Command("подработка"))
@@ -1970,9 +1983,101 @@ async def part_time_job(message: types.Message):
     if not is_bot_active(): return
     uid = str(message.from_user.id)
     user = get_or_create_user(uid, message.from_user.username or message.from_user.first_name)
+    now = datetime.now()
+    if user.get('last_part_time'):
+        last_work = datetime.fromisoformat(user['last_part_time'])
+        if now - last_work < timedelta(minutes=30):
+            rem = timedelta(minutes=30) - (now - last_work)
+            await message.answer(f"⏳ КД! Осталось: {rem.seconds//60}м")
+            return
     earnings = random.randint(50, 100)
-    get_db_ref(f'users/{uid}').update({'gold': user.get('gold', 0) + earnings})
+    get_db_ref(f'users/{uid}').update({'money': user.get('money', 0) + earnings, 'last_part_time': now.isoformat()})
     await message.answer(f"💼 Вы заработали {earnings} монет на подработке!")
+
+@router.message(Command("устроиться"))
+async def big_job(message: types.Message):
+    if not is_bot_active(): return
+    uid = str(message.from_user.id)
+    user = get_or_create_user(uid, message.from_user.username or message.from_user.first_name)
+    now = datetime.now()
+    if user.get('last_big_job'):
+        last_work = datetime.fromisoformat(user['last_big_job'])
+        if now - last_work < timedelta(hours=6):
+            rem = timedelta(hours=6) - (now - last_work)
+            await message.answer(f"⏳ КД! Осталось: {rem.seconds//3600}ч {(rem.seconds//60)%60}м")
+            return
+    earnings = random.randint(500, 1000)
+    get_db_ref(f'users/{uid}').update({'money': user.get('money', 0) + earnings, 'last_big_job': now.isoformat()})
+    await message.answer(f"🏢 Вы устроились на крупную работу и заработали {earnings} монет!")
+
+@router.message(F.text.regexp(r'(?i)^/строй завод'))
+async def build_factory(message: types.Message):
+    if not is_bot_active(): return
+    uid = str(message.from_user.id)
+    user = get_or_create_user(uid, message.from_user.username or message.from_user.first_name)
+    clan_id = user.get('clan_id')
+    if not clan_id:
+        await message.answer("⚠️ Вы не состоите в клане.")
+        return
+    clan_ref = get_db_ref(f'clans/{clan_id}')
+    clan = clan_ref.get()
+    if clan.get('leader') != uid:
+        await message.answer("⚠️ Только лидер может строить заводы.")
+        return
+        
+    now = datetime.now()
+    if clan.get('last_factory_build'):
+        last_build = datetime.fromisoformat(clan['last_factory_build'])
+        if now - last_build < timedelta(minutes=10):
+            rem = timedelta(minutes=10) - (now - last_build)
+            await message.answer(f"⏳ КД! Осталось: {rem.seconds//60}м")
+            return
+            
+    earnings = random.randint(200, 500)
+    clan_ref.update({'money': clan.get('money', 0) + earnings, 'last_factory_build': now.isoformat()})
+    await message.answer(f"🏭 Вы построили завод и принесли клану {earnings} монет!")
+
+@router.message(F.text.regexp(r'(?i)^/продать товар'))
+async def sell_item(message: types.Message):
+    if not is_bot_active(): return
+    args = message.text.split()
+    if len(args) < 4:
+        await message.answer("⚠️ Использование: <code>/продать товар [название] [шт]</code>")
+        return
+        
+    item = args[2].lower()
+    try:
+        amount = int(args[3])
+    except:
+        await message.answer("⚠️ Количество должно быть числом.")
+        return
+        
+    if amount <= 0: return
+    
+    user_id = str(message.from_user.id)
+    user = get_or_create_user(user_id, message.from_user.username or message.from_user.first_name)
+    clan_id = user.get('clan_id')
+    if not clan_id: return
+    
+    clan_ref = get_db_ref(f'clans/{clan_id}')
+    clan = clan_ref.get()
+    
+    productions = clan.get('productions', {})
+    if productions.get(item, 0) < amount:
+        await message.answer(f"⚠️ Недостаточно товара <b>{html.escape(item)}</b> (у вас {productions.get(item, 0)}).")
+        return
+        
+    prices = {'железо': 10, 'дерево': 5, 'еда': 2}
+    price_per_unit = prices.get(item, 1)
+    total_money = amount * price_per_unit
+    
+    productions[item] -= amount
+    clan_ref.update({
+        'productions': productions,
+        'money': clan.get('money', 0) + total_money
+    })
+    
+    await message.answer(f"✅ Продано {amount} шт. {html.escape(item)} за {total_money} монет.")
 
 @router.message(Command("кланы"))
 async def list_clans(message: types.Message):
@@ -1983,7 +2088,7 @@ async def list_clans(message: types.Message):
         return
     text = "🛡 <b>Список кланов:</b>\n\n"
     for cid, c in all_clans.items():
-        text += f"• {html.escape(c.get('name', ''))} [{html.escape(c.get('tag', ''))}] — 💰 {c.get('gold', 0)}\n"
+        text += f"• {html.escape(c.get('name', ''))} [{html.escape(c.get('tag', ''))}] — 💰 {c.get('money', 0)}\n"
     await message.answer(text)
 
 
