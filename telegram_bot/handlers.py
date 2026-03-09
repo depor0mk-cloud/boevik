@@ -533,6 +533,45 @@ async def cmd_war(message: types.Message):
         return
     await message.answer("⚔️ <b>Военное:</b>\n• /объявить войну [клан]\n• /мир [клан] [ресурс/монеты] [кол-во]\n• /мобилизация — Нанять армию\n• /тренировка — Увеличить силу\n• /атака [кол-во]\n• /оборона [кол-во]\n• /столица [сумма]\n• /ультиматум [клан] [текст]\n• /разработка — Вклад в ракеты\n• /пуск [тип] [цель] — Ядерный удар")
 
+@router.message(Command("войны"))
+async def cmd_wars(message: types.Message):
+    if not is_bot_active():
+        await message.answer("⚠️ Бот временно отключен на технические работы.")
+        return
+    wars = get_db_ref('wars').get() or {}
+    if not wars:
+        await message.answer("🕊 Сейчас нет активных войн.")
+        return
+    
+    text = "⚔️ <b>Активные войны:</b>\n"
+    for war_id, war in wars.items():
+        attacker = get_db_ref(f"clans/{war['attacker_id']}").get()
+        defender = get_db_ref(f"clans/{war['defender_id']}").get()
+        text += f"• {attacker.get('name', '???')} vs {defender.get('name', '???')}\n"
+    
+    await message.answer(text, parse_mode="HTML")
+
+@router.message(Command("армия"))
+async def cmd_army(message: types.Message):
+    if not is_bot_active():
+        await message.answer("⚠️ Бот временно отключен на технические работы.")
+        return
+    uid = str(message.from_user.id)
+    user = get_or_create_user(uid, message.from_user.username or message.from_user.first_name)
+    clan_id = user.get('clan_id')
+    if not clan_id:
+        await message.answer("⚠️ Вы не в клане.")
+        return
+    clan = get_db_ref(f'clans/{clan_id}').get()
+    army = clan.get('army', {})
+    text = (
+        f"🛡 <b>Армия клана {html.escape(clan.get('name', '???'))}:</b>\n"
+        f"• Сила: {army.get('strength', 0)}\n"
+        f"• Количество: {army.get('count', 0)}\n"
+        f"• Опыт: {army.get('experience', 0)}"
+    )
+    await message.answer(text, parse_mode="HTML")
+
 @router.message(Command("другое"))
 async def cmd_other(message: types.Message):
     if not is_bot_active():
@@ -2161,7 +2200,7 @@ async def build_factory(message: types.Message, user_id=None, username=None):
     })
     await message.answer(f"✅ Завод ({ftype}) построен!")
 
-@router.message(F.text.regexp(r'(?i)^/переименовать завод'))
+@router.message(F.text.regexp(r'(?i)^/переименовать\s+завод'))
 async def rename_factory(message: types.Message):
     if not is_bot_active():
         await message.answer("⚠️ Бот временно отключен на технические работы.")
