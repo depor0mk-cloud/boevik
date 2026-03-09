@@ -1978,65 +1978,6 @@ async def work2(message: types.Message):
     get_db_ref(f'users/{uid}').update({'money': user.get('money', 0) + earnings, 'last_work2': now.isoformat()})
     await message.answer(f"🔨 Вы заработали {earnings} монет на второй работе!")
 
-@router.message(Command("подработка"))
-async def part_time_job(message: types.Message):
-    if not is_bot_active(): return
-    uid = str(message.from_user.id)
-    user = get_or_create_user(uid, message.from_user.username or message.from_user.first_name)
-    now = datetime.now()
-    if user.get('last_part_time'):
-        last_work = datetime.fromisoformat(user['last_part_time'])
-        if now - last_work < timedelta(minutes=30):
-            rem = timedelta(minutes=30) - (now - last_work)
-            await message.answer(f"⏳ КД! Осталось: {rem.seconds//60}м")
-            return
-    earnings = random.randint(50, 100)
-    get_db_ref(f'users/{uid}').update({'money': user.get('money', 0) + earnings, 'last_part_time': now.isoformat()})
-    await message.answer(f"💼 Вы заработали {earnings} монет на подработке!")
-
-@router.message(Command("устроиться"))
-async def big_job(message: types.Message):
-    if not is_bot_active(): return
-    uid = str(message.from_user.id)
-    user = get_or_create_user(uid, message.from_user.username or message.from_user.first_name)
-    now = datetime.now()
-    if user.get('last_big_job'):
-        last_work = datetime.fromisoformat(user['last_big_job'])
-        if now - last_work < timedelta(hours=6):
-            rem = timedelta(hours=6) - (now - last_work)
-            await message.answer(f"⏳ КД! Осталось: {rem.seconds//3600}ч {(rem.seconds//60)%60}м")
-            return
-    earnings = random.randint(500, 1000)
-    get_db_ref(f'users/{uid}').update({'money': user.get('money', 0) + earnings, 'last_big_job': now.isoformat()})
-    await message.answer(f"🏢 Вы устроились на крупную работу и заработали {earnings} монет!")
-
-@router.message(F.text.regexp(r'(?i)^/строй завод'))
-async def build_factory(message: types.Message):
-    if not is_bot_active(): return
-    uid = str(message.from_user.id)
-    user = get_or_create_user(uid, message.from_user.username or message.from_user.first_name)
-    clan_id = user.get('clan_id')
-    if not clan_id:
-        await message.answer("⚠️ Вы не состоите в клане.")
-        return
-    clan_ref = get_db_ref(f'clans/{clan_id}')
-    clan = clan_ref.get()
-    if clan.get('leader') != uid:
-        await message.answer("⚠️ Только лидер может строить заводы.")
-        return
-        
-    now = datetime.now()
-    if clan.get('last_factory_build'):
-        last_build = datetime.fromisoformat(clan['last_factory_build'])
-        if now - last_build < timedelta(minutes=10):
-            rem = timedelta(minutes=10) - (now - last_build)
-            await message.answer(f"⏳ КД! Осталось: {rem.seconds//60}м")
-            return
-            
-    earnings = random.randint(200, 500)
-    clan_ref.update({'money': clan.get('money', 0) + earnings, 'last_factory_build': now.isoformat()})
-    await message.answer(f"🏭 Вы построили завод и принесли клану {earnings} монет!")
-
 @router.message(F.text.regexp(r'(?i)^/продать товар'))
 async def sell_item(message: types.Message):
     if not is_bot_active(): return
@@ -2059,39 +2000,23 @@ async def sell_item(message: types.Message):
     clan_id = user.get('clan_id')
     if not clan_id: return
     
+    collect_production(clan_id)
     clan_ref = get_db_ref(f'clans/{clan_id}')
     clan = clan_ref.get()
     
-    productions = clan.get('productions', {})
-    if productions.get(item, 0) < amount:
-        await message.answer(f"⚠️ Недостаточно товара <b>{html.escape(item)}</b> (у вас {productions.get(item, 0)}).")
+    resources = clan.get('resources', {})
+    if resources.get(item, 0) < amount:
+        await message.answer(f"⚠️ Недостаточно товара <b>{html.escape(item)}</b> (у вас {resources.get(item, 0)}).")
         return
         
     prices = {'железо': 10, 'дерево': 5, 'еда': 2}
     price_per_unit = prices.get(item, 1)
     total_money = amount * price_per_unit
     
-    productions[item] -= amount
+    resources[item] -= amount
     clan_ref.update({
-        'productions': productions,
+        'resources': resources,
         'money': clan.get('money', 0) + total_money
     })
     
     await message.answer(f"✅ Продано {amount} шт. {html.escape(item)} за {total_money} монет.")
-
-@router.message(Command("кланы"))
-async def list_clans(message: types.Message):
-    if not is_bot_active(): return
-    all_clans = get_db_ref('clans').get() or {}
-    if not all_clans:
-        await message.answer("🛡 Кланов пока нет.")
-        return
-    text = "🛡 <b>Список кланов:</b>\n\n"
-    for cid, c in all_clans.items():
-        text += f"• {html.escape(c.get('name', ''))} [{html.escape(c.get('tag', ''))}] — 💰 {c.get('money', 0)}\n"
-    await message.answer(text)
-
-
-
-
-
