@@ -13,6 +13,15 @@ from firebase_db import get_db_ref
 
 router = Router()
 
+@router.message()
+async def all_messages_handler(message: types.Message):
+    await message.answer("Бот в разработке. Выход запланирован 14.03")
+
+@router.callback_query()
+async def all_callbacks_handler(callback: types.CallbackQuery):
+    await callback.answer("Бот в разработке. Выход запланирован 14.03", show_alert=True)
+
+
 # ... imports ...
 from aiogram.types import InlineKeyboardButton
 
