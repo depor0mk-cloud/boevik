@@ -34,7 +34,14 @@ async def main():
     init_firebase()
     
     # Start dummy web server for Render
-    await start_web_server()
+    app = web.Application()
+    app.router.add_get('/', handle)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    port = 3000
+    site = web.TCPSite(runner, '0.0.0.0', port)
+    await site.start()
+    logging.info(f"Web server started on port {port}")
     
     bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     
@@ -51,6 +58,10 @@ async def main():
         await dp.start_polling(bot)
     except Exception as e:
         logging.error(f"Polling error: {e}")
+    finally:
+        logging.info("Shutting down...")
+        await bot.session.close()
+        await runner.cleanup()
 
 if __name__ == "__main__":
     try:
