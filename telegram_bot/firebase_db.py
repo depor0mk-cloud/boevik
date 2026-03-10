@@ -1,9 +1,12 @@
 import os
 import firebase_admin
 from firebase_admin import credentials, db
-import dotenv
 
-dotenv.load_dotenv()
+try:
+    import dotenv
+    dotenv.load_dotenv()
+except ImportError:
+    pass
 
 def init_firebase():
     if not firebase_admin._apps:
