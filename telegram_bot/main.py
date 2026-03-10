@@ -60,7 +60,9 @@ async def main():
         logging.error(f"Polling error: {e}")
     finally:
         logging.info("Shutting down...")
+        # Close bot session
         await bot.session.close()
+        # Cleanup web server
         await runner.cleanup()
 
 if __name__ == "__main__":
