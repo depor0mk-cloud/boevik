@@ -12,7 +12,7 @@ interface SessionData {
 
 type MyContext = Context & SessionFlavor<SessionData>;
 
-const bot = new Bot<MyContext>(process.env.TELEGRAM_BOT_TOKEN!);
+export const bot = new Bot<MyContext>(process.env.TELEGRAM_BOT_TOKEN!);
 
 bot.use(session({ initial: (): SessionData => ({}) }));
 
@@ -947,5 +947,5 @@ bot.command('атака', async (ctx) => {
   }
 });
 
-bot.start();
-console.log('Bot is running...');
+// bot.start();
+// console.log('Bot is running...');
